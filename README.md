@@ -21,6 +21,7 @@ Im Tab **⚙️ Stammdaten & Export** lassen sich **Gruppen** anlegen (z. B. Tea
 - - Gruppen-Termine erhalten beim Generieren eine **eigene ID mit Gruppen-Scope** – ein Gruppentermin kann dadurch nicht mehr versehentlich mit einem Normaltermin gleichen Zeitslots/Ortes verschmolzen oder beim Dedupe verworfen werden.
 - Bei der **automatischen Zuteilung** werden Aufgaben mit Gruppen nur an Mitglieder dieser Gruppen vergeben.
 - In der **Verfügbarkeits-Liste** werden Nicht-Mitglieder ausgegraut mit dem Grund „Nicht in relevanter Gruppe“.
+- Bei Terminen mit **mehreren Gruppen** sind Mitglieder **aller** ausgewählten Gruppen wählbar – bei Gruppenterminen entscheidet die Gruppen-Zugehörigkeit, die Qualifikations-Matrix blockiert nicht zusätzlich (Abwesenheiten und Schicht-Blockaden gelten weiterhin).
 - Im Kalender tragen Gruppen-Termine ein kleines **Indigo-Badge mit dem Gruppen-Kürzel** am Termin-Chip; mehrere Termine pro Tag sind durch die vorangestellte Uhrzeit klar getrennt.
 - Wird eine Gruppe gelöscht, wird sie automatisch aus allen Terminen und Mustern entfernt.
 
