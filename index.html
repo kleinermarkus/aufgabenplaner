@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.6';
+    const APP_VERSION = '1.10.7';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1648,7 +1648,7 @@
                   taskGroupNames.length > 0 ? h('span', { title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-indigo-600 text-white rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, getInitials(taskGroupNames[0])) : null,
                   h('span', { className: 'text-[9px] font-bold opacity-90 shrink-0' }, slot?.time || ''),
                   h('div', { className: 'min-w-0 flex-1 leading-tight' },
-                    h('span', { className: 'text-[11px] font-bold truncate block' }, person ? person.name : 'Offen'),
+                    h('span', { className: 'text-[11px] font-bold truncate block' }, person ? person.name : (taskGroupNames.length > 0 ? taskGroupNames.join(', ') : 'Offen')),
                     h('span', { className: 'text-[9px] opacity-80 truncate block' }, loc?.name || 'Ort')
                   )
                 );
@@ -1659,12 +1659,14 @@
                 const loc = locations.find(l => l.id === t.locationId);
                 const slot = timeSlots.find(s => s.id === t.slotId);
                 const person = people.find(p => p.id === t.assignedPersonId);
+                const taskGroupNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
+                const taskGroupInitials = taskGroupNames.map(n => getInitials(n)).join('');
                 return h('div', {
                   key: t.id,
-                  title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : 'Offen',
-                  className: `px-0.5 py-0.5 rounded border text-center leading-none ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300 text-rose-700'}`
+                  title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : (taskGroupNames.length > 0 ? `Gruppentermin: ${taskGroupNames.join(', ')}` : 'Offen'),
+                  className: `px-0.5 py-0.5 rounded border text-center leading-none ${person ? getPersonColor(person.id) : (taskGroupNames.length > 0 ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-rose-50 border-rose-300 text-rose-700')}`
                 },
-                  h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : 'Offen'),
+                  h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : (taskGroupNames.length > 0 ? taskGroupInitials : 'Offen')),
                   slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null,
                   (t.groupIds || []).length > 0 ? h('div', { className: 'text-[7px] font-bold text-indigo-700 mt-0.5' }, dayGroupInitials) : null
                 );
