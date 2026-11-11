@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.9.0';
+    const APP_VERSION = '1.9.1';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -301,6 +301,7 @@
       const [newPatMonthlyWeekDay, setNewPatMonthlyWeekDay] = useState('1');
       const [newPatGroupIds, setNewPatGroupIds] = useState([]);
       const [newGroupName, setNewGroupName] = useState('');
+      const [editPatGroupIds, setEditPatGroupIds] = useState([]);
       const [newTaskGroupIds, setNewTaskGroupIds] = useState([]);
       const [editingPattern, setEditingPattern] = useState(null);
 
@@ -2016,6 +2017,7 @@
                             setEditingPattern(null);
                           } else {
                             setEditingPattern(pat);
+                            setEditPatGroupIds([...(pat.groupIds || [])]);
                           }
                         }, className: 'text-indigo-600 font-semibold text-xs hover:underline' }, isEditingThis ? '✕ Abbrechen' : '✏️ Bearbeiten'),
                         h('button', { onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
@@ -2035,10 +2037,7 @@
                         const monthlyDay = frequency === 'monthly' && monthlyMode === 'dayOfMonth' ? parseInt(e.target.elements.editMonthlyDay.value, 10) || 1 : null;
                         const monthlyWeek = frequency === 'monthly' && monthlyMode === 'nthWeekday' ? e.target.elements.editMonthlyWeek.value : null;
                         const monthlyWeekDay = frequency === 'monthly' && monthlyMode === 'nthWeekday' ? parseInt(e.target.elements.editMonthlyWeekDay.value, 10) : null;
-                        const editGroupBoxes = e.target.elements.editGroup;
-                        const editGroupIds = editGroupBoxes ? [...editGroupBoxes].filter(cb => cb.checked).map(cb => cb.value) : [];
-
-                        setPatterns(patterns.map(p => p.id === pat.id ? { ...p, slotId, locationId, frequency, weekParity, monthlyMode, monthlyDay, monthlyWeek, monthlyWeekDay, groupIds: editGroupIds } : p));
+                        setPatterns(patterns.map(p => p.id === pat.id ? { ...p, slotId, locationId, frequency, weekParity, monthlyMode, monthlyDay, monthlyWeek, monthlyWeekDay, groupIds: [...editPatGroupIds] } : p));
                         setEditingPattern(null);
                         showToast('Muster erfolgreich aktualisiert!', 'success');
                       },
@@ -2109,10 +2108,11 @@
                       groups.length > 0 ? h('div', null,
                         h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Relevante Gruppen (optional – leer = für alle)'),
                         h('div', { className: 'flex flex-wrap gap-1' },
-                          groups.map(g => h('label', { key: g.id, className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold cursor-pointer flex items-center gap-1 ${(pat.groupIds || []).includes(g.id) ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300'}` },
-                            h('input', { type: 'checkbox', name: 'editGroup', value: g.id, defaultChecked: (pat.groupIds || []).includes(g.id), className: 'hidden' }),
-                            (pat.groupIds || []).includes(g.id) ? '✓ ' : '', g.name
-                          ))
+                          groups.map(g => h('button', {
+                            key: g.id, type: 'button',
+                            onClick: () => setEditPatGroupIds(editPatGroupIds.includes(g.id) ? editPatGroupIds.filter(id => id !== g.id) : [...editPatGroupIds, g.id]),
+                            className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold ${editPatGroupIds.includes(g.id) ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300'}`
+                          }, `${editPatGroupIds.includes(g.id) ? '✓ ' : ''}${g.name}`))
                         )
                       ) : null,
                       h('button', { type: 'submit', className: 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg self-end' }, 'Speichern')
