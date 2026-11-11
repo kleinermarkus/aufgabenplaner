@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.9.8';
+    const APP_VERSION = '1.9.7';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -800,12 +800,9 @@
         const matchSlot = timeSlots.find(s => s.dayOfWeek === slot.dayOfWeek && s.time === slot.time);
         if (!matchSlot) return { isAvailable: false, reason: 'Kein passender Slot' };
 
-        // Bei Gruppenterminen entscheidet die Gruppen-Zugehörigkeit – Mitglieder aller
-        // relevanten Gruppen sind wählbar, die Qualifikations-Matrix blockiert nicht zusätzlich
-        const isGroupTask = Array.isArray(groupIds) && groupIds.length > 0;
         const matrixKey = `${matchSlot.id}_${locationId}`;
         const isQualified = !!person.matrix?.[matrixKey];
-        if (!isQualified && !isGroupTask) return { isAvailable: false, reason: 'Nicht für diesen Ort/Zeitslot qualifiziert' };
+        if (!isQualified) return { isAvailable: false, reason: 'Nicht für diesen Ort/Zeitslot qualifiziert' };
 
         return { isAvailable: true, reason: 'Verfügbar' };
       };
