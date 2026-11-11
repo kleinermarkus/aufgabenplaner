@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.0';
+    const APP_VERSION = '1.10.1';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -249,44 +249,110 @@
     const isSyncEnvelope = (msg) => !!msg && typeof msg === 'object' && msg.type === 'sync' && !!msg.data;
     const syncKeyOf = (code, token) => `${code}.${token}`;
 
+    // Demo-Daten für die Erstinstallation: greifen nur, wenn im Browser noch keine
+    // Daten gespeichert sind – bereits genutzte Apps werden nie überschrieben.
+    const demoToday = new Date();
+    const demoDateStr = (offsetDays) => {
+      const d = new Date(demoToday);
+      d.setDate(d.getDate() + offsetDays);
+      return toLocalDateStr(d);
+    };
+    const DEMO_TS = 1704063600000;
+
     const INITIAL_LOCATIONS = [
       { id: 'loc-1', name: 'Hauptgebäude' },
       { id: 'loc-2', name: 'Saal B' },
-      { id: 'loc-3', name: 'Außenstelle' }
+      { id: 'loc-3', name: 'Werkstatt' },
+      { id: 'loc-4', name: 'Außenstelle' }
     ];
 
     const INITIAL_SLOTS = [
       { id: 'slot-1', dayOfWeek: 1, time: '08:00' },
       { id: 'slot-2', dayOfWeek: 3, time: '14:00' },
       { id: 'slot-3', dayOfWeek: 5, time: '18:00' },
-      { id: 'slot-4', dayOfWeek: 0, time: '09:30' }
+      { id: 'slot-4', dayOfWeek: 0, time: '09:30' },
+      { id: 'slot-5', dayOfWeek: 6, time: '10:00' }
     ];
 
-    const INITIAL_GROUPS = [];
+    const INITIAL_GROUPS = [
+      { id: 'grp-demo-1', name: 'Gruppe Nord', personIds: ['p-1', 'p-3', 'p-5'], updatedAt: DEMO_TS },
+      { id: 'grp-demo-2', name: 'Gruppe Süd', personIds: ['p-2', 'p-4', 'p-6'], updatedAt: DEMO_TS }
+    ];
 
     const INITIAL_PATTERNS = [
-      { id: 'pat-1', slotId: 'slot-1', locationId: 'loc-1', frequency: 'weekly' },
-      { id: 'pat-2', slotId: 'slot-2', locationId: 'loc-2', frequency: 'biweekly' },
-      { id: 'pat-3', slotId: 'slot-3', locationId: 'loc-2', frequency: 'weekly' },
-      { id: 'pat-4', slotId: 'slot-4', locationId: 'loc-1', frequency: 'weekly' }
+      { id: 'pat-1', slotId: 'slot-1', locationId: 'loc-1', frequency: 'weekly', weekParity: null, monthlyMode: null, monthlyDay: null, monthlyWeek: null, monthlyWeekDay: null, groupIds: [], updatedAt: DEMO_TS },
+      { id: 'pat-2', slotId: 'slot-2', locationId: 'loc-2', frequency: 'biweekly', weekParity: 'even', monthlyMode: null, monthlyDay: null, monthlyWeek: null, monthlyWeekDay: null, groupIds: [], updatedAt: DEMO_TS },
+      { id: 'pat-3', slotId: 'slot-3', locationId: 'loc-2', frequency: 'monthly', weekParity: null, monthlyMode: 'dayOfMonth', monthlyDay: 1, monthlyWeek: null, monthlyWeekDay: null, groupIds: [], updatedAt: DEMO_TS },
+      { id: 'pat-4', slotId: 'slot-4', locationId: 'loc-1', frequency: 'monthly', weekParity: null, monthlyMode: 'nthWeekday', monthlyDay: null, monthlyWeek: 1, monthlyWeekDay: 6, groupIds: [], updatedAt: DEMO_TS },
+      { id: 'pat-5', slotId: 'slot-5', locationId: 'loc-3', frequency: 'weekly', weekParity: null, monthlyMode: null, monthlyDay: null, monthlyWeek: null, monthlyWeekDay: null, groupIds: ['grp-demo-1'], updatedAt: DEMO_TS }
     ];
 
     const INITIAL_PEOPLE = [
-      { id: 'p-1', name: 'Markus', absences: [], matrix: { 'slot-1_loc-1': true, 'slot-3_loc-2': true } },
-      { id: 'p-2', name: 'Anna', absences: [], matrix: { 'slot-1_loc-1': true, 'slot-3_loc-2': true } },
-      { id: 'p-3', name: 'Ben', absences: [], matrix: { 'slot-2_loc-2': true, 'slot-3_loc-2': true } },
-      { id: 'p-4', name: 'Clara', absences: [], matrix: { 'slot-4_loc-1': true, 'slot-1_loc-1': true } }
+      { id: 'p-1', name: 'Anna Beispiel', absences: [], matrix: { 'slot-1_loc-1': true, 'slot-1_loc-2': true, 'slot-3_loc-2': true, 'slot-4_loc-1': true }, shiftRotation: null },
+      { id: 'p-2', name: 'Ben Beispiel', absences: [], matrix: { 'slot-2_loc-2': true, 'slot-3_loc-2': true, 'slot-5_loc-3': true }, shiftRotation: null },
+      { id: 'p-3', name: 'Clara Beispiel', absences: [], matrix: { 'slot-1_loc-1': true, 'slot-4_loc-1': true, 'slot-5_loc-3': true }, shiftRotation: null },
+      { id: 'p-4', name: 'David Beispiel', absences: [], matrix: { 'slot-2_loc-1': true, 'slot-2_loc-2': true }, shiftRotation: { enabled: true, startDate: demoDateStr(0), cycle: [...DEFAULT_SHIFT_CYCLE] } },
+      { id: 'p-5', name: 'Emma Beispiel', absences: [{ id: 'abs-demo-1', start: demoDateStr(10), end: demoDateStr(14), label: 'Urlaub (Beispiel)' }], matrix: { 'slot-1_loc-2': true, 'slot-3_loc-2': true, 'slot-4_loc-1': true, 'slot-5_loc-1': true }, shiftRotation: null },
+      { id: 'p-6', name: 'Felix Beispiel', absences: [], matrix: { 'slot-1_loc-1': true, 'slot-2_loc-1': true, 'slot-4_loc-1': true }, shiftRotation: null }
     ];
 
+    const buildDemoSchedule = () => {
+      const tasks = [];
+      const seen = new Set();
+      for (let offset = 1; offset <= 14; offset++) {
+        const d = new Date(demoToday);
+        d.setDate(d.getDate() + offset);
+        for (const pat of INITIAL_PATTERNS) {
+          const slot = INITIAL_SLOTS.find(s => s.id === pat.slotId);
+          if (!slot || !patternMatchesDate(pat, d, slot)) continue;
+          const dateStr = demoDateStr(offset);
+          const scope = (pat.groupIds || []).slice().sort().join(',');
+          const id = `task-${dateStr}-${pat.slotId}-${pat.locationId}${scope ? '-grp-' + scope.replace(/,/g, '-') : ''}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          tasks.push({ id, dateStr, slotId: pat.slotId, locationId: pat.locationId, groupIds: [...(pat.groupIds || [])], assignedPersonId: null, assignedBy: null, isManual: false, updatedAt: DEMO_TS });
+        }
+      }
+      const demoAssignees = ['p-1', 'p-2', 'p-5'];
+      let ai = 0;
+      for (const t of tasks) {
+        if (!t.groupIds.length && ai < demoAssignees.length) {
+          t.assignedPersonId = demoAssignees[ai];
+          t.assignedBy = 'manual';
+          ai++;
+        }
+      }
+      let manualOffset = 2;
+      const manualDate = new Date(demoToday);
+      manualDate.setDate(manualDate.getDate() + manualOffset);
+      while (manualDate.getDay() === 1) {
+        manualOffset++;
+        manualDate.setDate(manualDate.getDate() + 1);
+      }
+      tasks.push({
+        id: 'manual-demo-1',
+        dateStr: demoDateStr(manualOffset),
+        slotId: 'slot-1',
+        locationId: 'loc-2',
+        groupIds: [],
+        assignedPersonId: 'p-6',
+        assignedBy: 'manual',
+        isManual: true,
+        updatedAt: DEMO_TS
+      });
+      return tasks;
+    };
+    const INITIAL_SCHEDULE = buildDemoSchedule();
+
     function App() {
-      const [currentDate, setCurrentDate] = useState(new Date(2026, 10, 1));
+      const [currentDate, setCurrentDate] = useState(new Date());
       const [activeTab, setActiveTab] = useState('calendar');
       
       const [locations, setLocations] = useState(() => JSON.parse(localStorage.getItem('app_locs')) || INITIAL_LOCATIONS);
       const [timeSlots, setTimeSlots] = useState(() => JSON.parse(localStorage.getItem('app_slots')) || INITIAL_SLOTS);
       const [patterns, setPatterns] = useState(() => JSON.parse(localStorage.getItem('app_pats')) || INITIAL_PATTERNS);
       const [people, setPeople] = useState(() => (JSON.parse(localStorage.getItem('app_people')) || INITIAL_PEOPLE).sort((a, b) => a.name.localeCompare(b.name, 'de')));
-      const [schedule, setSchedule] = useState(() => JSON.parse(localStorage.getItem('app_sched')) || []);
+      const [schedule, setSchedule] = useState(() => JSON.parse(localStorage.getItem('app_sched')) || INITIAL_SCHEDULE);
 
       const [selectedDateStr, setSelectedDateStr] = useState('2026-11-04');
       const [editingTask, setEditingTask] = useState(null);
