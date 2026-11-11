@@ -38,7 +38,13 @@ Beim Aktualisieren einer neuen Version: `APP_VERSION` in `index.html` **und** `v
 
 1. **Gerät 1:** „Sync starten“ erzeugt einen 8-stelligen Sync-Code – angezeigt als **QR-Code** und als **Text mit Kopieren-Button** (📋 Code kopieren).
 2. **Gerät 2:** „Mit Code verbinden“ – den Code ins Textfeld **eingeben oder per Zwischenablage einfügen** (📋 Code aus Zwischenablage einfügen) und verbinden.
-3. Verbunden: Orte, Zeitslots, Muster, Personen (inkl. Abwesenheiten, Matrix und Schichtrhythmus) und Termine werden automatisch **in beide Richtungen** übertragen.
+3. **Automatische Synchronisierung:** Nach dem ersten Abgleich bleiben die Geräte verbunden – jede Änderung (Orte, Zeitslots, Muster, Personen, Abwesenheiten, Schichtrhythmen, Termine) wird automatisch in beide Richtungen übertragen, ohne erneuten Code-Austausch. Bei aktiver Verbindung zeigt der Kopf-Button **🟢 Sync aktiv**.
+
+Der Dialog kann jederzeit über den Kopf-Button geöffnet werden; das Schließen des Fensters beendet die Verbindung nicht – getrennt wird explizit über **🔌 Verbindung trennen**.
+
+### Sync-Protokoll
+
+Im Hintergrund wird ein **Protokoll** geführt (persistiert im Browser, max. 200 Einträge): Verbindungsstatus, gesendete (↑) und empfangene (↓) Übertragungen mit Zeitstempel sowie Fehler. Einsehbar im Geräte-Sync-Dialog unten unter **📜 Sync-Protokoll**, dort auch per Button löschbar.
 
 Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selbst gehen direkt Gerät-zu-Gerät (peer-to-peer) und werden auf keinem Server gespeichert.
 
