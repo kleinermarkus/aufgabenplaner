@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.5';
+    const APP_VERSION = '1.10.6';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -421,6 +421,10 @@
 
       const [selectedDateStr, setSelectedDateStr] = useState('2026-11-04');
       const [editingTask, setEditingTask] = useState(null);
+      const [moveDialog, setMoveDialog] = useState(null);
+      const [moveChoice, setMoveChoice] = useState('existing');
+      const [moveSlotId, setMoveSlotId] = useState('');
+      const [moveNewTime, setMoveNewTime] = useState('');
       const [newPersonName, setNewPersonName] = useState('');
 
       // Form States
@@ -1834,23 +1838,92 @@
                           onChange: (e) => {
                             const nd = e.target.value;
                             if (!nd || nd === task.dateStr) return;
-                            const slotTime = timeSlots.find(s => s.id === task.slotId)?.time;
-                            const scope = (task.groupIds || []).slice().sort().join(',');
-                            const collision = schedule.some(t => t.id !== task.id && t.dateStr === nd && timeSlots.find(s => s.id === t.slotId)?.time === slotTime && (t.groupIds || []).slice().sort().join(',') === scope);
-                            if (collision) {
-                              showToast('An diesem Datum existiert bereits ein Termin zur gleichen Zeit.', 'error');
+                            const ndDate = parseLocalDate(nd);
+                            const oldDow = parseLocalDate(task.dateStr).getDay();
+                            const newDow = ndDate.getDay();
+                            setEditingTask(null);
+                            if (newDow === oldDow) {
+                              const slotTime = timeSlots.find(s => s.id === task.slotId)?.time;
+                              const scope = (task.groupIds || []).slice().sort().join(',');
+                              const collision = schedule.some(t => t.id !== task.id && t.dateStr === nd && timeSlots.find(s => s.id === t.slotId)?.time === slotTime && (t.groupIds || []).slice().sort().join(',') === scope);
+                              if (collision) {
+                                showToast('An diesem Datum existiert bereits ein Termin zur gleichen Zeit.', 'error');
+                                return;
+                              }
+                              setSchedule(schedule.map(t => t.id === task.id ? { ...t, dateStr: nd, updatedAt: Date.now() } : t));
+                              setSelectedDateStr(nd);
+                              setCurrentDate(new Date(ndDate.getFullYear(), ndDate.getMonth(), 1));
+                              showToast(`Termin verschoben auf ${ndDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}.`, 'success');
                               return;
                             }
-                            const ndDate = parseLocalDate(nd);
-                            setSchedule(schedule.map(t => t.id === task.id ? { ...t, dateStr: nd, updatedAt: Date.now() } : t));
-                            setSelectedDateStr(nd);
-                            setCurrentDate(new Date(ndDate.getFullYear(), ndDate.getMonth(), 1));
-                            setEditingTask(null);
-                            showToast(`Termin verschoben auf ${ndDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}.`, 'success');
+                            const curSlot = timeSlots.find(s => s.id === task.slotId);
+                            const sameDaySlots = timeSlots.filter(s => s.dayOfWeek === newDow).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+                            const sameTimeSlot = sameDaySlots.find(s => s.time === curSlot?.time);
+                            setMoveChoice(sameDaySlots.length > 0 ? 'existing' : 'new');
+                            setMoveSlotId(sameTimeSlot ? sameTimeSlot.id : (sameDaySlots[0]?.id || ''));
+                            setMoveNewTime(curSlot?.time || '08:00');
+                            setMoveDialog({ taskId: task.id, newDateStr: nd });
                           },
                           className: 'text-[10px] p-1 border rounded bg-white border-slate-300'
                         })
                       ),
+                      moveDialog?.taskId === task.id ? (() => {
+                        const mDow = parseLocalDate(moveDialog.newDateStr).getDay();
+                        const mSlots = timeSlots.filter(s => s.dayOfWeek === mDow).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+                        const qualCount = (s) => people.filter(p => p.matrix?.[`${s.id}_${task.locationId}`]).length;
+                        const confirmMove = () => {
+                          const nd = moveDialog.newDateStr;
+                          const ndDate = parseLocalDate(nd);
+                          let chosenSlot = null;
+                          let newSlots = null;
+                          if (moveChoice === 'existing') {
+                            chosenSlot = timeSlots.find(s => s.id === moveSlotId);
+                            if (!chosenSlot) { showToast('Bitte einen Zeitslot wählen.', 'error'); return; }
+                          } else {
+                            if (!/^\d{2}:\d{2}$/.test(moveNewTime)) { showToast('Bitte eine gültige Uhrzeit angeben.', 'error'); return; }
+                            chosenSlot = timeSlots.find(s => s.dayOfWeek === mDow && s.time === moveNewTime);
+                            if (!chosenSlot) {
+                              chosenSlot = { id: `slot-${Date.now()}`, dayOfWeek: mDow, time: moveNewTime };
+                              newSlots = [...timeSlots, chosenSlot];
+                            }
+                          }
+                          const scope = (task.groupIds || []).slice().sort().join(',');
+                          const collision = schedule.some(t => t.id !== task.id && t.dateStr === nd && timeSlots.find(s => s.id === t.slotId)?.time === chosenSlot.time && (t.groupIds || []).slice().sort().join(',') === scope);
+                          if (collision) { showToast('An diesem Datum existiert bereits ein Termin zur gleichen Zeit.', 'error'); return; }
+                          if (newSlots) setTimeSlots(newSlots);
+                          setSchedule(schedule.map(t => t.id === task.id ? { ...t, dateStr: nd, slotId: chosenSlot.id, updatedAt: Date.now() } : t));
+                          setSelectedDateStr(nd);
+                          setCurrentDate(new Date(ndDate.getFullYear(), ndDate.getMonth(), 1));
+                          setMoveDialog(null);
+                          const assigned = people.find(p => p.id === task.assignedPersonId);
+                          const stillQualified = assigned && !!assigned.matrix?.[`${chosenSlot.id}_${task.locationId}`];
+                          showToast(assigned && !stillQualified
+                            ? `Termin verschoben (${DAY_NAMES[mDow]} ${chosenSlot.time} Uhr). Hinweis: ${assigned.name} ist für den neuen Zeitslot nicht qualifiziert.`
+                            : `Termin verschoben auf ${ndDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })} – Zeitslot: ${DAY_NAMES[mDow]} ${chosenSlot.time} Uhr.`, 'success');
+                        };
+                        return h('div', { className: 'p-2 bg-amber-50 border border-amber-300 rounded space-y-2' },
+                          h('p', { className: 'text-[10px] font-semibold text-amber-900' }, `⏰ Zeitslot anpassen: Der aktuelle Zeitslot gilt für ${DAY_NAMES[parseLocalDate(task.dateStr).getDay()]}. Für ${DAY_NAMES[mDow]} (${parseLocalDate(moveDialog.newDateStr).toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric', year: 'numeric' })}) einen passenden Zeitslot wählen, damit nur qualifizierte Personen eingeteilt werden können.`),
+                          mSlots.length > 0 ? h('label', { className: 'flex items-center gap-1.5 text-[10px] font-semibold text-slate-700' },
+                            h('input', { type: 'radio', checked: moveChoice === 'existing', onChange: () => setMoveChoice('existing') }),
+                            h('span', null, 'Vorhandenen Zeitslot nutzen:')
+                          ) : h('p', { className: 'text-[10px] text-slate-500 italic' }, `Keine Zeitslots für ${DAY_NAMES[mDow]} vorhanden – bitte einen neuen anlegen.`),
+                          moveChoice === 'existing' && mSlots.length > 0 ? h('select', { value: moveSlotId, onChange: (e) => setMoveSlotId(e.target.value), className: 'w-full text-xs p-1 border rounded bg-white' },
+                            mSlots.map(s => h('option', { key: s.id, value: s.id }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr (${qualCount(s)} qualifiziert)`))
+                          ) : null,
+                          h('label', { className: 'flex items-center gap-1.5 text-[10px] font-semibold text-slate-700' },
+                            h('input', { type: 'radio', checked: moveChoice === 'new', onChange: () => setMoveChoice('new') }),
+                            h('span', null, 'Neuen Zeitslot anlegen:')
+                          ),
+                          moveChoice === 'new' ? h('div', { className: 'flex items-center gap-1.5' },
+                            h('span', { className: 'text-[10px] text-slate-500' }, 'Uhrzeit:'),
+                            h('input', { type: 'time', value: moveNewTime, onChange: (e) => setMoveNewTime(e.target.value), className: 'text-xs p-1 border rounded bg-white' })
+                          ) : null,
+                          h('div', { className: 'flex gap-2' },
+                            h('button', { onClick: confirmMove, className: 'px-2 py-1 rounded bg-indigo-600 text-white text-[10px] font-semibold hover:bg-indigo-700' }, '✓ Verschieben'),
+                            h('button', { onClick: () => setMoveDialog(null), className: 'px-2 py-1 rounded bg-white border border-slate-300 text-[10px] font-semibold text-slate-600 hover:bg-slate-100' }, 'Abbrechen')
+                          )
+                        );
+                      })() : null,
                       groups.length > 0 ? h('div', { className: 'flex flex-wrap gap-1 items-center' },
                         h('span', { className: 'text-[9px] font-bold text-slate-400' }, 'Gruppen:'),
                         groups.map(g => {
