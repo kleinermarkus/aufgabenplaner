@@ -18,6 +18,7 @@ Die automatische Zuteilung („2. Personen zuteilen") und die Empfehlung im Aufg
 4. alphabetisch (entscheidet nur bei völliger Gleichheit).
 
 Die Bewertung zählt bei der **automatischen Zuteilung** nur bereits vergangene oder gleichzeitige Einsätze – automatisch zugeteilte Zukunftstermine fließen nicht ein, damit die Verteilung auch dann fair bleibt, wenn weit im Voraus Termine generiert wurden. **Manuell eingeteilte Termine zählen jedoch auch in der Zukunft**, ebenso bei der **Empfehlung**, die alle zukünftigen Termine berücksichtigt. Die Pause wird dabei nie negativ – ein Zukunftstermin verschlechtert die eigene Bilanz, ohne die Verteilung kippen zu lassen. Damit wird niemand übersprungen, wenn andere verfügbar sind. Bereits zugeteilte Aufgaben bleiben beim erneuten Ausführen unverändert; mit **„🧹 Zuteilungen zurücksetzen (Monat)"** und erneutem „Personen zuteilen" wird ein Monat komplett neu und fair verteilt.
+
 Im Aufgaben-Panel genügen zwei Klickwege: Die **⭐ Empfehlung ist anklickbar** und weist die vorgeschlagene Person direkt zu, und im Auswahl-Menü steht bei jeder gesperrten Person der **Grund in Klammern** (z. B. Schicht, Abwesenheit, nicht qualifiziert) – eine separate Verfügbarkeitsliste gibt es nicht mehr.
 
 ## Schichtarbeit (externes 3-Schicht-System)
