@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.9';
+    const APP_VERSION = '1.10.10';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1036,41 +1036,46 @@
       };
 
       // Einsatz-Bilanz aufbauen (optional eine Aufgabe ausschließen, z. B. die bewertete selbst)
-      const buildAssignmentStats = (scheduleList, peopleList, excludeTaskId, untilDateStr) => {
+      const buildAssignmentStats = (scheduleList, peopleList, excludeTaskId) => {
         const counts = {};
         const weekdayCounts = {};
-        const lastAssignedDate = {};
+        const dates = {};
         peopleList.forEach(p => {
           counts[p.id] = 0;
           weekdayCounts[p.id] = {};
           for (let i = 0; i < 7; i++) weekdayCounts[p.id][i] = 0;
-          lastAssignedDate[p.id] = null;
+          dates[p.id] = [];
         });
         scheduleList.forEach(t => {
           if (!t.assignedPersonId || t.id === excludeTaskId || counts[t.assignedPersonId] === undefined) return;
           // Gruppen-Termine laufen außer Konkurrenz: Zuteilungen dort zählen in keiner Bilanz
           if (Array.isArray(t.groupIds) && t.groupIds.length > 0) return;
           counts[t.assignedPersonId]++;
-          const taskDate = parseLocalDate(t.dateStr);
-          const wDay = taskDate.getDay();
+          const wDay = parseLocalDate(t.dateStr).getDay();
           weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
-          const isFuture = untilDateStr && t.dateStr > untilDateStr;
-          if (!isFuture && (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId])) {
-            lastAssignedDate[t.assignedPersonId] = t.dateStr;
-          }
+          dates[t.assignedPersonId].push(t.dateStr);
         });
-        return { counts, weekdayCounts, lastAssignedDate };
+        Object.values(dates).forEach(list => list.sort());
+        return { counts, weekdayCounts, dates };
       };
 
       // Fair-Sortierung: 1. längste Pause, 2. weniger Gesamteinsätze, 3. Wochentags-Balance, 4. alphabetisch
       const sortCandidatesByFairness = (candidates, task, stats) => {
         const taskDate = parseLocalDate(task.dateStr);
         const taskWDay = taskDate.getDay();
+        // Pause = Abstand zur NÄCHSTEN Einteilung – davor oder danach; manuelle Vormerkungen
+        // in der Zukunft zählen damit genauso wie zurückliegende Einsätze
+        const pauseDays = (id) => {
+          let best = Infinity;
+          (stats.dates[id] || []).forEach(d => {
+            const diff = Math.abs((taskDate - parseLocalDate(d)) / 86400000);
+            if (diff < best) best = diff;
+          });
+          return best;
+        };
         return [...candidates].sort((a, b) => {
-          const lastA = stats.lastAssignedDate[a.id] ? parseLocalDate(stats.lastAssignedDate[a.id]) : null;
-          const lastB = stats.lastAssignedDate[b.id] ? parseLocalDate(stats.lastAssignedDate[b.id]) : null;
-          const daysA = lastA ? Math.max(0, (taskDate - lastA) / 86400000) : Infinity;
-          const daysB = lastB ? Math.max(0, (taskDate - lastB) / 86400000) : Infinity;
+          const daysA = pauseDays(a.id);
+          const daysB = pauseDays(b.id);
           if (daysA !== daysB) return daysB - daysA;
 
           const diffCount = stats.counts[a.id] - stats.counts[b.id];
@@ -1248,21 +1253,13 @@
             stats.counts[t.assignedPersonId]++;
             const wDay = parseLocalDate(t.dateStr).getDay();
             stats.weekdayCounts[t.assignedPersonId][wDay] = (stats.weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
+            stats.dates[t.assignedPersonId].push(t.dateStr);
           }
         });
-        let histIdx = 0;
+        Object.values(stats.dates).forEach(list => list.sort());
 
         let assignedCount = 0;
         updatedSchedule = updatedSchedule.map(task => {
-          while (histIdx < updatedSchedule.length && updatedSchedule[histIdx].dateStr <= task.dateStr) {
-            const hist = updatedSchedule[histIdx];
-            if (hist.assignedPersonId && !(Array.isArray(hist.groupIds) && hist.groupIds.length > 0) && stats.counts[hist.assignedPersonId] !== undefined) {
-              if (!stats.lastAssignedDate[hist.assignedPersonId] || hist.dateStr > stats.lastAssignedDate[hist.assignedPersonId]) {
-                stats.lastAssignedDate[hist.assignedPersonId] = hist.dateStr;
-              }
-            }
-            histIdx++;
-          }
           if (task.assignedPersonId) return task;
           // Gruppen-Termine werden nur manuell zugeteilt
           if (Array.isArray(task.groupIds) && task.groupIds.length > 0) return task;
@@ -1277,7 +1274,7 @@
             const taskWDay = parseLocalDate(task.dateStr).getDay();
             stats.counts[chosen.id]++;
             stats.weekdayCounts[chosen.id][taskWDay] = (stats.weekdayCounts[chosen.id][taskWDay] || 0) + 1;
-            stats.lastAssignedDate[chosen.id] = task.dateStr;
+            stats.dates[chosen.id].push(task.dateStr);
             assignedCount++;
             return { ...task, assignedPersonId: chosen.id, assignedBy: 'auto', updatedAt: Date.now() };
           }
