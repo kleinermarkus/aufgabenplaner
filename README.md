@@ -2,6 +2,59 @@
 
 Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilung mit Feiertagsunterstützung für alle deutschen Bundesländer (Standard: Sachsen).
 
+## Funktionsübersicht
+
+### 📅 Planer & Kalender
+- **Monatskalender** mit Feiertagen (Bundesland einstellbar), farbigen Namens-Chips (mobil als Akronym) und mitwachsenden Zellen bei mehreren Terminen pro Tag
+- **Tag antippen** → Aufgaben-Panel rechts: „+ Aufgabe anlegen", Zeitslot/Ort ändern, **Gruppen-Chips direkt am Termin umschalten**, ⭐ **Empfehlung** anklickbar, Verfügbarkeits-Liste mit Klick-Zuteilung und **Grundangaben** bei Sperren (Abwesend, Schicht, Qualifikation, Gruppe)
+- **1. Termine generieren (vollst. KW)** – legt alle wiederkehrenden Termine des Monats an (inkl. Gruppentermine), mit Duplikatschutz auch über Monatswechsel hinweg
+- **2. Personen zuteilen** – faire automatische Verteilung (Gruppentermine ausgenommen)
+- **🧹 Zuteilungen zurücksetzen (Monat)** – alle Zuteilungen des Monats freigeben, dann neu verteilen
+- **🖨️ Monatsplan als PDF drucken** – druckoptimierte Ansicht
+- **Monatstermine löschen** – alle Termine des angezeigten Monats entfernen
+
+### 👥 Personen & Matrix
+- **Personen anlegen/verwalten** (Name, Farbe automatisch)
+- **Qualifikations-Matrix**: Pro Person × Zeitslot × Ort, wer kann was übernehmen
+- **Abwesenheiten**: Pro Person manuell (Start/Ende, Grund) oder **Import aus PDF/DOCX**
+- **Externes Schichtsystem (Rotation)**: Startdatum + beliebiger Rhythmus aus Früh/Spät/Nacht/frei (F/S/N/–), Vorschau der nächsten 7 Tage; Schichten blockieren automatisch (Früh 06–14, Spät 14–22, Nacht 22–06 + Folgetag bis 14 Uhr)
+
+### 🔄 Wiederkehrende Muster
+- **Wöchentlich**, **alle 2 Wochen** (Kalenderwochen-Parität) oder **monatlich** (fester Tag des Monats oder x. Wochentag im Monat, auch „letzter")
+- **Optionale Gruppen-Relevanz** je Muster; Muster nachträglich bearbeiten/löschen
+
+### 📊 Statistik
+- Einsätze je Person **gesamt und je Wochentag** über den gesamten Plan
+
+### ⚙️ Stammdaten & Export
+- **Orte** und **Zeitslots** verwalten (Wochentag + Uhrzeit)
+- **Gruppen verwalten**: Anlegen, Mitglieder zuordnen; Löschen entfernt die Gruppe aus allen Terminen/Mustern
+- **Bundesland** für die gesetzlichen Feiertage (16 Länder, Standard Sachsen)
+- **Datensicherung**: Backup als JSON exportieren/importieren, **gesamte App als .html herunterladen**
+- **Gefahrenzone**: Alle Anwendungsdaten komplett löschen
+
+### 🔄 Geräte-Sync (WebRTC)
+- Kopplung zweier Geräte per **QR-Code oder Schlüssel-Text** (`Code.Token`) mit **Authentifizierungs-Handshake**
+- **Automatischer Live-Sync** in beide Richtungen, **dauerhafte Kopplung** mit Auto-Wiederverbindung, **Sync-Protokoll** einsehbar
+- **Löschungen werden mit synchronisiert** (Tombstones); Änderungen per Last-Update-wins; Versionswarnung bei unterschiedlichen App-Ständen
+
+### 📱 PWA
+- **Installierbar** als App; **Update-Banner** bei neuer Server-Version; **Versionsnummer** im Kopf
+
+### 🛠️ Zentrale Programm-Funktionen (Code-Referenz)
+| Funktion | Aufgabe |
+|---|---|
+| `generateDates` | Erzeugt Termine aus Mustern (volle Kalenderwochen, Duplikatschutz, Gruppen-IDs mit Gruppen-Scope) |
+| `patternMatchesDate` / `isNthWeekdayOfMonth` | Prüft, ob ein Muster an einem Datum greift (wöchentlich/2-wöchentlich/monatlich) |
+| `assignPeople` | Faire automatische Zuteilung (überspringt Gruppentermine) |
+| `buildAssignmentStats` / `sortCandidatesByFairness` | Einsatz-Bilanz (Pause, Anzahl, Wochentags-Balance) und Sortierung |
+| `getPersonAvailabilityDetails` | Verfügbarkeit + Grund (Gruppe, Abwesenheit, Schicht, Qualifikation) |
+| `getExternalShiftBlock` | Schicht-Blockierung aus der Rotation pro Person |
+| `getGermanHolidays` / `GERMAN_STATES` | Feiertage je Bundesland |
+| `collectSyncData` / `applySyncData` | Sync-Payload bauen / empfangen (idempotent, Tombstones, LWW via `mergeTasks`) |
+| `isHelloValid` / `isSyncEnvelope` / `generateSyncToken` | Sync-Handshake: Authentifizierung und Nachrichten-Umschläge |
+| `getPairing` / `establishSync` / `scheduleReconnect` | Dauerhafte Kopplung, Verbindungsaufbau, Auto-Reconnect |
+
 ## Nutzung
 
 Beim **automatischen Termine generieren** wird geprüft, ob zur gleichen Zeit (gleiches Datum + gleiche Uhrzeit, unabhängig von Zeitslot-ID und Ort) bereits ein Termin existiert – auch in überlappenden Kalenderwochen beim Monatswechsel und innerhalb eines Durchlaufs. So entstehen keine Doppel-Termine.
