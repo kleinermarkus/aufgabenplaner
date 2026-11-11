@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.9.6';
+    const APP_VERSION = '1.9.7';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -222,7 +222,7 @@
         next.setDate(next.getDate() + 7);
         return next.getMonth() !== date.getMonth();
       }
-      return Math.floor((date.getDate() - 1) / 7) + 1 === week;
+      return Math.floor((date.getDate() - 1) / 7) + 1 === parseInt(week, 10);
     }
 
     // Prüft, ob ein Muster an einem Datum greift (wöchentlich, 2-wöchentlich oder monatlich)
@@ -1123,7 +1123,7 @@
           weekParity: newPatFreq === 'biweekly' ? newPatParity : null,
           monthlyMode: newPatFreq === 'monthly' ? newPatMonthlyMode : null,
           monthlyDay: newPatFreq === 'monthly' && newPatMonthlyMode === 'dayOfMonth' ? parseInt(newPatMonthlyDay, 10) || 1 : null,
-          monthlyWeek: newPatFreq === 'monthly' && newPatMonthlyMode === 'nthWeekday' ? newPatMonthlyWeek : null,
+          monthlyWeek: newPatFreq === 'monthly' && newPatMonthlyMode === 'nthWeekday' ? (parseInt(newPatMonthlyWeek, 10) || newPatMonthlyWeek) : null,
           monthlyWeekDay: newPatFreq === 'monthly' && newPatMonthlyMode === 'nthWeekday' ? parseInt(newPatMonthlyWeekDay, 10) : null,
           groupIds: [...newPatGroupIds],
           updatedAt: Date.now()
@@ -2075,7 +2075,8 @@
                         const weekParity = frequency === 'biweekly' ? e.target.elements.editParity.value : null;
                         const monthlyMode = frequency === 'monthly' ? e.target.elements.editMonthlyMode.value : null;
                         const monthlyDay = frequency === 'monthly' && monthlyMode === 'dayOfMonth' ? parseInt(e.target.elements.editMonthlyDay.value, 10) || 1 : null;
-                        const monthlyWeek = frequency === 'monthly' && monthlyMode === 'nthWeekday' ? e.target.elements.editMonthlyWeek.value : null;
+                        const monthlyWeekRaw = frequency === 'monthly' && monthlyMode === 'nthWeekday' ? e.target.elements.editMonthlyWeek.value : null;
+                        const monthlyWeek = monthlyWeekRaw ? (parseInt(monthlyWeekRaw, 10) || monthlyWeekRaw) : null;
                         const monthlyWeekDay = frequency === 'monthly' && monthlyMode === 'nthWeekday' ? parseInt(e.target.elements.editMonthlyWeekDay.value, 10) : null;
                         setPatterns(patterns.map(p => p.id === pat.id ? { ...p, slotId, locationId, frequency, weekParity, monthlyMode, monthlyDay, monthlyWeek, monthlyWeekDay, groupIds: [...editPatGroupIds], updatedAt: Date.now() } : p));
                         setEditingPattern(null);

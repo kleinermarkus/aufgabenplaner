@@ -29,7 +29,7 @@ Im Tab **⚙️ Stammdaten & Export** lassen sich **Gruppen** anlegen (z. B. Tea
 Wiederkehrende Muster können neben „Wöchentlich“ und „Alle 2 Wochen“ auch **monatlich** laufen:
 
 - **Am gleichen Tag des Monats** (z. B. jeden 15.) – Monate ohne diesen Tag werden übersprungen.
-- **Am x. Wochentag im Monat** (z. B. am 2. Montag oder am letzten Freitag).
+- **Am x. Wochentag im Monat** (z. B. am 2. Montag oder am letzten Freitag). Wochenwerte werden als Zahl gespeichert und beim Prüfen tolerant interpretiert – bestehende Muster mit String-Werten (z. B. „1“ aus dem Auswahlfeld) funktionieren ebenfalls zuverlässig.
 
 Monatliche Termine werden unabhängig vom Wochentag des Zeitslots erzeugt; die Uhrzeit kommt weiterhin vom Zeitslot.
 
