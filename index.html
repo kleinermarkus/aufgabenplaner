@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.7';
+    const APP_VERSION = '1.10.8';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -86,6 +86,13 @@
       const parts = name.trim().split(/\s+/);
       if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    };
+
+    // Ein-Buchstaben-Kürzel für Gruppen-Chips: unterscheidendes Wort nutzen (z. B. "Gruppe Nord" -> "N")
+    const groupLetter = (name) => {
+      if (!name) return '?';
+      const parts = name.trim().split(/\s+/);
+      return (parts.length > 1 ? parts[parts.length - 1][0] : parts[0][0]).toUpperCase();
     };
 
     // Externe Schicht einer Person an einem Datum (Rotation ab Startdatum, null = keine Einschränkung)
@@ -1623,9 +1630,6 @@
         const isSelected = selectedDateStr === dateStr;
         const holidayName = holidays[dateStr];
         const dayTasks = schedule.filter(t => t.dateStr === dateStr);
-        const dayGroupNames = [...new Set(dayTasks.flatMap(t => (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean)))];
-        const dayGroupInitials = dayGroupNames.map(n => getInitials(n)).join('');
-
         dayElements.push(
           h('div', {
             key: dateStr,
@@ -1645,10 +1649,10 @@
                 const person = people.find(p => p.id === t.assignedPersonId);
                 const taskGroupNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
                 return h('div', { key: t.id, className: `p-1 rounded border flex items-center gap-1 min-w-0 ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300'}` },
-                  taskGroupNames.length > 0 ? h('span', { title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-indigo-600 text-white rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, getInitials(taskGroupNames[0])) : null,
+                  taskGroupNames.length > 0 ? taskGroupNames.map((gn, gi) => h('span', { key: gi, title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-indigo-600 text-white rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, groupLetter(gn))) : null,
                   h('span', { className: 'text-[9px] font-bold opacity-90 shrink-0' }, slot?.time || ''),
                   h('div', { className: 'min-w-0 flex-1 leading-tight' },
-                    h('span', { className: 'text-[11px] font-bold truncate block' }, person ? person.name : (taskGroupNames.length > 0 ? taskGroupNames.join(', ') : 'Offen')),
+                    h('span', { className: 'text-[11px] font-bold truncate block' }, person ? person.name : (taskGroupNames.length > 1 ? 'Gruppen' : (taskGroupNames.length === 1 ? taskGroupNames[0] : 'Offen'))),
                     h('span', { className: 'text-[9px] opacity-80 truncate block' }, loc?.name || 'Ort')
                   )
                 );
@@ -1666,9 +1670,9 @@
                   title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : (taskGroupNames.length > 0 ? `Gruppentermin: ${taskGroupNames.join(', ')}` : 'Offen'),
                   className: `px-0.5 py-0.5 rounded border text-center leading-none ${person ? getPersonColor(person.id) : (taskGroupNames.length > 0 ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-rose-50 border-rose-300 text-rose-700')}`
                 },
-                  h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : (taskGroupNames.length > 0 ? taskGroupInitials : 'Offen')),
+                  h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : (taskGroupNames.length > 1 ? 'Gruppen' : (taskGroupNames.length === 1 ? taskGroupInitials : 'Offen'))),
                   slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null,
-                  (t.groupIds || []).length > 0 ? h('div', { className: 'text-[7px] font-bold text-indigo-700 mt-0.5' }, dayGroupInitials) : null
+                  taskGroupNames.length > 0 ? h('div', { className: 'text-[7px] font-bold text-indigo-700 mt-0.5' }, taskGroupNames.map(n => groupLetter(n)).join('')) : null
                 );
               })
             ) : null

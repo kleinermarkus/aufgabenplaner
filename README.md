@@ -5,7 +5,7 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 ## Funktionsübersicht
 
 ### 📅 Planer & Kalender
-- **Monatskalender** mit Feiertagen (Bundesland einstellbar), farbigen Namens-Chips (mobil als Akronym) und mitwachsenden Zellen bei mehreren Terminen pro Tag; Gruppentermine ohne Zuteilung zeigen statt „Offen“ den Gruppennamen (mobil das Gruppen-Kürzel, indigo-farben)
+- **Monatskalender** mit Feiertagen (Bundesland einstellbar), farbigen Namens-Chips (mobil als Akronym) und mitwachsenden Zellen bei mehreren Terminen pro Tag; Gruppentermine zeigen links einen Ein-Buchstaben-Chip je Gruppe (unterscheidendes Wort, z. B. „Gruppe Nord“ → „N“); ohne Zuteilung steht dort der Gruppenname bzw. bei mehreren Gruppen „Gruppen“ (mobil Kürzel, indigo-farben)
 - **Tag antippen** → Aufgaben-Panel rechts: „+ Aufgabe anlegen", Zeitslot/Ort ändern, **Gruppen-Chips direkt am Termin umschalten**, ⭐ **Empfehlung** anklickbar, Verfügbarkeits-Liste mit Klick-Zuteilung und **Grundangaben** bei Sperren (Abwesend, Schicht, Qualifikation, Gruppe)
 - **📅 Datum ändern** – jeden geplanten Termin direkt im Panel verschieben (Datumsfeld am Termin); der Kalender springt zum neuen Tag, Kollisionen zur gleichen Zeit werden abgefangen. Bei Wechsel des Wochentags fragt ein Banner, ob ein vorhandener Zeitslot des neuen Wochentags genutzt (mit Anzahl qualifizierter Personen) oder ein neuer Zeitslot angelegt werden soll – so bleiben die Qualifikationsprüfungen korrekt; ist die aktuell zugeteilte Person für den neuen Zeitslot nicht qualifiziert, gibt es einen Warnhinweis
 - **1. Termine generieren (vollst. KW)** – legt alle wiederkehrenden Termine des Monats an (inkl. Gruppentermine), mit Duplikatschutz auch über Monatswechsel hinweg
