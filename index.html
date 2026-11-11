@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.8.5';
+    const APP_VERSION = '1.8.6';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -1211,7 +1211,7 @@
           h('div', {
             key: dateStr,
             onClick: () => setSelectedDateStr(dateStr),
-            className: `min-h-[76px] sm:h-28 p-1 sm:p-1.5 border rounded-lg cursor-pointer transition-all flex flex-col justify-between min-w-0 overflow-hidden print-day-box ${
+            className: `min-h-[60px] sm:h-24 p-1 sm:p-1.5 border rounded-lg cursor-pointer transition-all flex flex-col justify-between min-w-0 overflow-hidden print-day-box ${
               isSelected ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-200' : 'border-slate-200 bg-white hover:border-slate-300'
             } ${!isCurrentMonth ? 'opacity-40 bg-slate-100/50' : ''} ${holidayName ? 'bg-amber-50/40' : ''}`
           },
@@ -1219,7 +1219,7 @@
               h('span', { className: `text-xs font-bold px-1.5 py-0.5 rounded ${holidayName ? 'bg-amber-200 text-amber-900' : 'text-slate-700'}` }, dayNum),
               holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[36px] sm:max-w-[70px]' }, holidayName) : null
             ),
-            h('div', { className: 'hidden sm:block space-y-1 overflow-y-auto max-h-16 my-1 min-w-0' },
+            h('div', { className: 'hidden sm:block space-y-1 overflow-y-auto max-h-[68px] my-1 min-w-0' },
               dayTasks.map(t => {
                 const loc = locations.find(l => l.id === t.locationId);
                 const slot = timeSlots.find(s => s.id === t.slotId);
@@ -1235,15 +1235,11 @@
                 const loc = locations.find(l => l.id === t.locationId);
                 const slot = timeSlots.find(s => s.id === t.slotId);
                 const person = people.find(p => p.id === t.assignedPersonId);
-                return h('div', { key: t.id, className: `text-[10px] leading-tight px-1 py-0.5 rounded border truncate font-bold ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300 text-rose-700'}` },
+                return h('div', { key: t.id, className: `text-[11px] leading-tight px-1 py-0.5 rounded border truncate font-bold ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300 text-rose-700'}` },
                   `${person ? person.name : 'Offen'} · ${loc?.name || 'Ort'} ${slot?.time || ''}`
                 );
               })
-            ) : null,
-            h('button', {
-              onClick: (e) => { e.stopPropagation(); setSelectedDateStr(dateStr); },
-              className: 'text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold text-center w-full py-0.5 bg-indigo-50 hover:bg-indigo-100 rounded no-print'
-            }, '+ Aufgabe')
+            ) : null
           )
         );
 
