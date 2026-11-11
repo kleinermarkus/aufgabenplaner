@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.8.7';
+    const APP_VERSION = '1.8.8';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -1244,9 +1244,10 @@
                 return h('div', {
                   key: t.id,
                   title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : 'Offen',
-                  className: `text-[11px] leading-tight px-1 py-0.5 rounded border truncate font-bold text-center ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300 text-rose-700'}`
+                  className: `px-0.5 py-0.5 rounded border text-center leading-none ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300 text-rose-700'}`
                 },
-                  `${person ? getInitials(person.name) : 'Offen'} · ${slot?.time || ''}`
+                  h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : 'Offen'),
+                  slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null
                 );
               })
             ) : null
