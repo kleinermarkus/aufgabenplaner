@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Aufgabenplaner – Material Design 3</title>
+<style>
+  :root {
+    --primary: #4b55c4; --on-primary: #ffffff;
+    --primary-container: #dfe0ff; --on-primary-container: #00105c;
+    --secondary-container: #e3e1ec; --on-secondary-container: #2b2933;
+    --tertiary-container: #ffd8e4; --on-tertiary-container: #31111d;
+    --surface: #fbf8ff; --on-surface: #1b1b21; --on-surface-variant: #46464f;
+    --surface-container-low: #f5f2fa; --surface-container: #efedf4;
+    --surface-container-high: #e9e7ef; --outline-variant: #c7c5d0;
+    --error-container: #f9dedc; --on-error-container: #410e0b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Roboto', 'Google Sans', system-ui, sans-serif;
+    background: var(--surface); color: var(--on-surface);
+    width: 1440px; height: 900px; overflow: hidden; display: flex; flex-direction: column;
+  }
+  /* Top App Bar (center-aligned, M3) */
+  .appbar {
+    height: 64px; display: flex; align-items: center; padding: 0 24px; gap: 12px;
+    background: var(--surface); flex-shrink: 0;
+  }
+  .appbar .logo {
+    width: 40px; height: 40px; border-radius: 20px; background: var(--primary-container);
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+  }
+  .appbar h1 { font-size: 22px; font-weight: 500; letter-spacing: 0.25px; flex: 1; }
+  .iconbtn {
+    width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center;
+    font-size: 18px; color: var(--on-surface-variant); background: transparent;
+  }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 16px; font-size: 13px; font-weight: 500;
+    display: flex; align-items: center; justify-content: center; color: #00105c; margin-left: -8px;
+    border: 2px solid var(--surface);
+  }
+  /* Headline row */
+  .headline { display: flex; align-items: center; padding: 8px 24px 16px; gap: 16px; flex-shrink: 0; }
+  .headline h2 { font-size: 34px; font-weight: 400; letter-spacing: 0; flex: 1; }
+  .headline h2 b { font-weight: 600; }
+  .seg {
+    display: flex; background: var(--surface-container-high); border-radius: 100px; padding: 4px; gap: 2px;
+  }
+  .seg span { padding: 7px 20px; border-radius: 100px; font-size: 14px; font-weight: 500; color: var(--on-surface-variant); }
+  .seg span.on { background: var(--secondary-container); color: var(--on-secondary-container); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px;
+    border: 1px solid var(--outline-variant); border-radius: 8px; font-size: 13.5px; font-weight: 500;
+    color: var(--on-surface-variant);
+  }
+  .chip.filter { border-radius: 8px; }
+  /* Layout */
+  .main { display: flex; flex: 1; gap: 20px; padding: 0 24px 24px; min-height: 0; }
+  .cal { flex: 1; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 26px 1fr; gap: 6px; }
+  .dow { font-size: 12px; font-weight: 600; color: var(--on-surface-variant); display: flex; align-items: center; justify-content: center; }
+  .cell {
+    background: var(--surface-container-low); border-radius: 14px; padding: 6px 7px; overflow: hidden;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .cell.today { background: var(--primary-container); }
+  .cell.other { opacity: 0.45; }
+  .cell.holiday { background: var(--tertiary-container); }
+  .dnum { font-size: 13px; font-weight: 500; color: var(--on-surface-variant); }
+  .cell.today .dnum {
+    background: var(--primary); color: var(--on-primary); width: 24px; height: 24px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; font-weight: 600;
+  }
+  .task {
+    border-radius: 8px; font-size: 11.5px; font-weight: 500; padding: 3px 8px;
+    display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden;
+  }
+  .task .time { font-size: 10px; font-weight: 700; opacity: 0.75; }
+  .task.grp { background: #d3e3fd; color: #041e49; }
+  .task.grp .gbadge {
+    background: #0b57d0; color: #fff; width: 14px; height: 14px; border-radius: 7px;
+    font-size: 9px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .c-emerald { background: #d3f0da; color: #0b3d14; }
+  .c-sky     { background: #d5e9ff; color: #062e55; }
+  .c-orange  { background: #ffe2c9; color: #4f2200; }
+  .c-amber   { background: #ffedb3; color: #402c00; }
+  .c-violet  { background: #e5dcff; color: #20156b; }
+  .c-lime    { background: #e4f3c8; color: #233a00; }
+  .c-pink    { background: #ffdbe7; color: #3d1128; }
+  .c-teal    { background: #cbeced; color: #063033; }
+  .c-blue    { background: #d3e3fd; color: #041e49; }
+  .c-yellow  { background: #fff2b6; color: #3f3100; }
+  /* Right panel */
+  .panel {
+    width: 360px; background: var(--surface-container-low); border-radius: 28px; padding: 24px;
+    display: flex; flex-direction: column; gap: 16px; flex-shrink: 0; overflow: hidden;
+  }
+  .panel .pdate { font-size: 22px; font-weight: 500; }
+  .panel .psub { font-size: 13px; color: var(--on-surface-variant); margin-top: 2px; }
+  .card {
+    background: var(--surface); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .card .t1 { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .card .t2 { font-size: 12.5px; color: var(--on-surface-variant); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border-radius: 100px;
+    font-size: 11.5px; font-weight: 600; width: fit-content;
+  }
+  .pill.rec { background: var(--primary-container); color: #00105c; }
+  .pill.ok  { background: #d3f0da; color: #0b3d14; }
+  .pill.no  { background: var(--error-container); color: var(--on-error-container); }
+  .avail { display: flex; flex-direction: column; gap: 2px; }
+  .arow {
+    display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; border-radius: 100px;
+    font-size: 13.5px; font-weight: 500;
+  }
+  .arow.free { background: var(--surface-container-high); }
+  .arow.free .why { font-size: 11.5px; color: #0b5c29; font-weight: 600; }
+  .arow.blocked { color: var(--on-surface-variant); }
+  .arow.blocked .why { font-size: 11.5px; color: #b3261e; font-weight: 600; }
+  .phead { font-size: 13px; font-weight: 600; color: var(--on-surface-variant); letter-spacing: 0.4px; text-transform: uppercase; }
+  /* FAB */
+  .fab {
+    position: fixed; right: 32px; bottom: 32px; height: 56px; padding: 0 24px; border-radius: 18px;
+    background: var(--primary-container); color: #00105c; font-size: 15px; font-weight: 600;
+    display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  }
+  .fab .plus { font-size: 22px; }
+</style>
+</head>
+<body>
+  <div class="appbar">
+    <div class="logo">📅</div>
+    <h1>Aufgabenplaner</h1>
+    <div class="iconbtn">🔍</div>
+    <div class="iconbtn">⟳</div>
+    <div style="display:flex; padding-left:8px;">
+      <div class="avatar" style="background:#d3f0da;">GM</div>
+      <div class="avatar" style="background:#d5e9ff;">WS</div>
+      <div class="avatar" style="background:#e5dcff;">CH</div>
+      <div class="avatar" style="background:#ffedb3;">+14</div>
+    </div>
+  </div>
+  <div class="headline">
+    <h2><b>Dezember</b> 2026</h2>
+    <div class="seg"><span class="on">Monat</span><span>Woche</span><span>Liste</span></div>
+    <div class="chip filter">◇ Alle Orte</div>
+    <div class="chip filter">🎄 Sachsen</div>
+    <div class="iconbtn">‹</div>
+    <div class="iconbtn">›</div>
+  </div>
+  <div class="main">
+    <div class="cal">
+      <div class="dow">Mo</div><div class="dow">Di</div><div class="dow">Mi</div><div class="dow">Do</div><div class="dow">Fr</div><div class="dow">Sa</div><div class="dow">So</div>
+      <div class="cell other"><span class="dnum">30</span></div>
+      <div class="cell other"><span class="dnum">1</span></div>
+      <div class="cell"><span class="dnum">2</span>
+        <div class="task grp"><span class="gbadge">T</span><span class="time">16:30</span>Thiele</div>
+      </div>
+      <div class="cell"><span class="dnum">3</span></div>
+      <div class="cell"><span class="dnum">4</span>
+        <div class="task c-emerald"><span class="time">15:00</span>Gerd M.</div>
+      </div>
+      <div class="cell"><span class="dnum">5</span>
+        <div class="task c-sky"><span class="time">09:30</span>Willi S.</div>
+        <div class="task grp"><span class="gbadge">J</span><span class="time">09:30</span>Jonderko</div>
+      </div>
+      <div class="cell"><span class="dnum">6</span></div>
+      <div class="cell"><span class="dnum">7</span>
+        <div class="task c-orange"><span class="time">16:30</span>Tomy K.</div>
+      </div>
+      <div class="cell"><span class="dnum">8</span></div>
+      <div class="cell"><span class="dnum">9</span>
+        <div class="task c-amber"><span class="time">15:00</span>Claus H.</div>
+      </div>
+      <div class="cell"><span class="dnum">10</span></div>
+      <div class="cell"><span class="dnum">11</span></div>
+      <div class="cell"><span class="dnum">12</span></div>
+      <div class="cell"><span class="dnum">13</span>
+        <div class="task c-violet"><span class="time">13:30</span>Julian K.</div>
+      </div>
+      <div class="cell"><span class="dnum">14</span>
+        <div class="task c-lime"><span class="time">16:30</span>Kevin R.</div>
+      </div>
+      <div class="cell"><span class="dnum">15</span></div>
+      <div class="cell"><span class="dnum">16</span></div>
+      <div class="cell"><span class="dnum">17</span></div>
+      <div class="cell"><span class="dnum">18</span>
+        <div class="task c-pink"><span class="time">15:00</span>Gioele C.</div>
+      </div>
+      <div class="cell" style="outline:3px solid #4b55c4; outline-offset:-3px;"><span class="dnum">19</span>
+        <div class="task c-teal"><span class="time">09:30</span>Sylvio T.</div>
+        <div class="task grp"><span class="gbadge">N</span><span class="time">09:30</span>Naumburger</div>
+      </div>
+      <div class="cell"><span class="dnum">20</span></div>
+      <div class="cell"><span class="dnum">21</span>
+        <div class="task c-blue"><span class="time">16:30</span>Oleksii M.</div>
+      </div>
+      <div class="cell"><span class="dnum">22</span></div>
+      <div class="cell"><span class="dnum">23</span>
+        <div class="task c-yellow"><span class="time">15:00</span>Philipp R.</div>
+      </div>
+      <div class="cell"><span class="dnum">24</span></div>
+      <div class="cell holiday"><span class="dnum">25</span><span style="font-size:10px;font-weight:600;">1. Weihnachten</span></div>
+      <div class="cell holiday"><span class="dnum">26</span><span style="font-size:10px;font-weight:600;">2. Weihnachten</span></div>
+      <div class="cell"><span class="dnum">27</span></div>
+      <div class="cell"><span class="dnum">28</span>
+        <div class="task c-emerald"><span class="time">16:30</span>Armel N.</div>
+      </div>
+      <div class="cell"><span class="dnum">29</span></div>
+      <div class="cell"><span class="dnum">30</span></div>
+      <div class="cell"><span class="dnum">31</span></div>
+      <div class="cell other"><span class="dnum">1</span></div>
+      <div class="cell other"><span class="dnum">2</span></div>
+      <div class="cell other"><span class="dnum">3</span></div>
+    </div>
+    <div class="panel">
+      <div>
+        <div class="pdate">Samstag, 19. Dezember</div>
+        <div class="psub">2 Termine · Sa 09:30 · 17 Personen</div>
+      </div>
+      <div class="card">
+        <div class="t1"><span style="width:10px;height:10px;border-radius:5px;background:#0b8457;display:inline-block;"></span>09:30 · Saal &amp; Zoom</div>
+        <div class="t2">Sylvio Thiele · automatisch zugeteilt</div>
+        <div class="pill rec">⭐ Empfehlung: Sylvio Thiele</div>
+      </div>
+      <div class="card">
+        <div class="t1"><span style="width:14px;height:14px;border-radius:7px;background:#0b57d0;color:#fff;font-size:9px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;">N</span>09:30 · Saal · Gruppentermin</div>
+        <div class="t2">Gruppe Naumburger · außer Konkurrenz</div>
+        <div class="pill ok">2 Mitglieder verfügbar</div>
+      </div>
+      <div class="phead">Verfügbarkeit</div>
+      <div class="avail">
+        <div class="arow free">Gerd Münzberger <span class="why">verfügbar</span></div>
+        <div class="arow free">Markus Pauli <span class="why">verfügbar</span></div>
+        <div class="arow blocked">Dietmar Buhl <span class="why">nicht qualifiziert</span></div>
+        <div class="arow blocked">Uwe Jonderko <span class="why">Gruppentermin an diesem Tag</span></div>
+        <div class="arow blocked">Willi Sonntag <span class="why">Nachtschicht</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="fab"><span class="plus">+</span> Aufgabe anlegen</div>
+</body>
+</html>

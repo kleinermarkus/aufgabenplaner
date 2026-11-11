@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Aufgabenplaner – Apple HIG (iOS 26 Liquid Glass)</title>
+<style>
+  :root {
+    --bg: #f2f2f7; --card: rgba(255,255,255,0.72); --glass: rgba(255,255,255,0.6);
+    --label: #1c1c1e; --secondary: #6e6e73; --tertiary: #aeaeb2;
+    --blue: #007aff; --blue-dark: #0040dd; --red: #ff3b30; --green: #34c759; --orange: #ff9500;
+    --sep: rgba(60,60,67,0.18); --fill: rgba(120,120,128,0.12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+    background: linear-gradient(160deg, #eef3ff 0%, #f2f2f7 40%, #fdf3f4 100%);
+    color: var(--label); width: 1440px; height: 900px; overflow: hidden;
+    display: flex; flex-direction: column; -webkit-font-smoothing: antialiased;
+  }
+  /* Liquid Glass Toolbar */
+  .toolbar {
+    height: 60px; display: flex; align-items: center; padding: 0 20px; gap: 14px; flex-shrink: 0;
+    background: rgba(255,255,255,0.55); backdrop-filter: blur(28px) saturate(1.8);
+    border-bottom: 0.5px solid var(--sep);
+  }
+  .toolbar .title { font-size: 17px; font-weight: 600; flex: 1; text-align: center; }
+  .tbtn {
+    min-width: 34px; height: 34px; border-radius: 17px; background: var(--glass);
+    backdrop-filter: blur(20px); border: 0.5px solid rgba(255,255,255,0.7);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--blue);
+  }
+  .avatars { display: flex; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 15px; font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; color: #fff; margin-left: -7px;
+    border: 2px solid rgba(255,255,255,0.9);
+  }
+  /* Large title + segmented */
+  .head { display: flex; align-items: flex-end; padding: 18px 28px 14px; gap: 18px; flex-shrink: 0; }
+  .head h1 { font-size: 40px; font-weight: 800; letter-spacing: -0.8px; flex: 1; }
+  .head h1 span { color: var(--secondary); font-weight: 700; }
+  .segctl {
+    display: flex; background: var(--fill); border-radius: 9px; padding: 2px;
+  }
+  .segctl span { padding: 6px 18px; font-size: 13px; font-weight: 500; color: var(--label); border-radius: 7px; }
+  .segctl span.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12); font-weight: 600; }
+  .chev { font-size: 22px; color: var(--blue); font-weight: 400; padding: 0 6px; }
+  /* Layout */
+  .main { display: flex; flex: 1; gap: 20px; padding: 0 28px 28px; min-height: 0; }
+  .calcard {
+    flex: 1; background: var(--card); backdrop-filter: blur(30px) saturate(1.6);
+    border-radius: 22px; border: 0.5px solid rgba(255,255,255,0.8);
+    box-shadow: 0 8px 32px rgba(31,38,135,0.08);
+    padding: 16px; display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 26px 1fr; gap: 5px;
+  }
+  .dow { font-size: 11px; font-weight: 600; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.3px; display: flex; align-items: center; justify-content: center; }
+  .cell { background: rgba(255,255,255,0.55); border-radius: 12px; padding: 5px 6px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+  .cell.other { opacity: 0.4; }
+  .cell.holiday { background: rgba(255,59,48,0.06); }
+  .dnum { font-size: 13px; font-weight: 500; color: var(--label); }
+  .cell.today .dnum { background: var(--red); color: #fff; width: 23px; height: 23px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+  .cell.sel { outline: 2.5px solid var(--blue); outline-offset: -2.5px; }
+  .task { border-radius: 7px; font-size: 11px; font-weight: 600; padding: 3px 7px; display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; color: #fff; }
+  .task .time { font-size: 9.5px; font-weight: 600; opacity: 0.85; }
+  .task.grp { background: linear-gradient(135deg, #3f9cff, #007aff); }
+  .task.grp .gbadge { background: rgba(255,255,255,0.95); color: var(--blue-dark); width: 14px; height: 14px; border-radius: 7px; font-size: 9px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .c-emerald { background: linear-gradient(135deg, #48c76c, #2fa14e); }
+  .c-sky     { background: linear-gradient(135deg, #4aa8ff, #1f7ae0); }
+  .c-orange  { background: linear-gradient(135deg, #ffab3d, #f08a00); }
+  .c-amber   { background: linear-gradient(135deg, #ffc94d, #e8a200); }
+  .c-violet  { background: linear-gradient(135deg, #a284fe, #7d5ae8); }
+  .c-lime    { background: linear-gradient(135deg, #8fce45, #5fae1f); }
+  .c-pink    { background: linear-gradient(135deg, #ff6482, #e83a66); }
+  .c-teal    { background: linear-gradient(135deg, #40c8d8, #1ba2b5); }
+  .c-blue    { background: linear-gradient(135deg, #5aa5ff, #2a7fe8); }
+  .c-yellow  { background: linear-gradient(135deg, #ffd60a, #e0a800); color: #4a3b00; }
+  /* Panel: glass + iOS grouped list */
+  .panel {
+    width: 360px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0; overflow: hidden;
+  }
+  .glass {
+    background: var(--card); backdrop-filter: blur(30px) saturate(1.6);
+    border-radius: 20px; border: 0.5px solid rgba(255,255,255,0.8);
+    box-shadow: 0 8px 32px rgba(31,38,135,0.08); padding: 18px 20px;
+  }
+  .panel .pdate { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; }
+  .panel .psub { font-size: 13px; color: var(--secondary); margin-top: 2px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 0.5px solid var(--sep); }
+  .row:last-child { border-bottom: none; padding-bottom: 2px; }
+  .row .ic {
+    width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0;
+  }
+  .row .rt { font-size: 14.5px; font-weight: 600; }
+  .row .rs { font-size: 12px; color: var(--secondary); margin-top: 1px; }
+  .row .badge { margin-left: auto; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 100px; }
+  .badge.rec { background: rgba(0,122,255,0.12); color: var(--blue); }
+  .badge.ok  { background: rgba(52,199,89,0.14); color: #1d8a3e; }
+  .badge.no  { background: rgba(255,59,48,0.12); color: #c92621; }
+  .phead { font-size: 12px; font-weight: 600; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 14px; }
+  .list {
+    background: var(--card); backdrop-filter: blur(30px) saturate(1.6); border-radius: 20px;
+    border: 0.5px solid rgba(255,255,255,0.8); box-shadow: 0 8px 32px rgba(31,38,135,0.08);
+    padding: 4px 16px;
+  }
+  .lrow { display: flex; align-items: center; justify-content: space-between; padding: 10px 2px; border-bottom: 0.5px solid var(--sep); font-size: 14px; font-weight: 500; }
+  .lrow:last-child { border-bottom: none; }
+  .lrow .why { font-size: 12.5px; font-weight: 600; }
+  .lrow .why.ok { color: #1d8a3e; } .lrow .why.no { color: #c92621; }
+  .cta {
+    height: 50px; border-radius: 25px; background: var(--blue); color: #fff; font-size: 16px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    box-shadow: 0 6px 20px rgba(0,122,255,0.35);
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="tbtn">☰</div>
+    <div class="title">Aufgabenplaner</div>
+    <div class="tbtn">⟳</div>
+    <div class="avatars">
+      <div class="avatar" style="background:linear-gradient(135deg,#48c76c,#2fa14e);">G</div>
+      <div class="avatar" style="background:linear-gradient(135deg,#4aa8ff,#1f7ae0);">W</div>
+      <div class="avatar" style="background:linear-gradient(135deg,#a284fe,#7d5ae8);">C</div>
+      <div class="avatar" style="background:var(--fill);color:var(--secondary);">15</div>
+    </div>
+  </div>
+  <div class="head">
+    <h1>Dezember <span>2026</span></h1>
+    <div class="segctl"><span class="on">Monat</span><span>Woche</span><span>Liste</span></div>
+    <div class="chev">‹</div>
+    <div class="chev">›</div>
+  </div>
+  <div class="main">
+    <div class="calcard">
+      <div class="dow">Mo</div><div class="dow">Di</div><div class="dow">Mi</div><div class="dow">Do</div><div class="dow">Fr</div><div class="dow">Sa</div><div class="dow">So</div>
+      <div class="cell other"><span class="dnum">30</span></div>
+      <div class="cell other"><span class="dnum">1</span></div>
+      <div class="cell"><span class="dnum">2</span>
+        <div class="task grp"><span class="gbadge">T</span><span class="time">16:30</span>Thiele</div>
+      </div>
+      <div class="cell"><span class="dnum">3</span></div>
+      <div class="cell"><span class="dnum">4</span>
+        <div class="task c-emerald"><span class="time">15:00</span>Gerd M.</div>
+      </div>
+      <div class="cell"><span class="dnum">5</span>
+        <div class="task c-sky"><span class="time">09:30</span>Willi S.</div>
+        <div class="task grp"><span class="gbadge">J</span><span class="time">09:30</span>Jonderko</div>
+      </div>
+      <div class="cell"><span class="dnum">6</span></div>
+      <div class="cell"><span class="dnum">7</span>
+        <div class="task c-orange"><span class="time">16:30</span>Tomy K.</div>
+      </div>
+      <div class="cell"><span class="dnum">8</span></div>
+      <div class="cell"><span class="dnum">9</span>
+        <div class="task c-amber"><span class="time">15:00</span>Claus H.</div>
+      </div>
+      <div class="cell"><span class="dnum">10</span></div>
+      <div class="cell"><span class="dnum">11</span></div>
+      <div class="cell"><span class="dnum">12</span></div>
+      <div class="cell"><span class="dnum">13</span>
+        <div class="task c-violet"><span class="time">13:30</span>Julian K.</div>
+      </div>
+      <div class="cell"><span class="dnum">14</span>
+        <div class="task c-lime"><span class="time">16:30</span>Kevin R.</div>
+      </div>
+      <div class="cell"><span class="dnum">15</span></div>
+      <div class="cell"><span class="dnum">16</span></div>
+      <div class="cell"><span class="dnum">17</span></div>
+      <div class="cell"><span class="dnum">18</span>
+        <div class="task c-pink"><span class="time">15:00</span>Gioele C.</div>
+      </div>
+      <div class="cell sel"><span class="dnum">19</span>
+        <div class="task c-teal"><span class="time">09:30</span>Sylvio T.</div>
+        <div class="task grp"><span class="gbadge">N</span><span class="time">09:30</span>Naumburger</div>
+      </div>
+      <div class="cell"><span class="dnum">20</span></div>
+      <div class="cell"><span class="dnum">21</span>
+        <div class="task c-blue"><span class="time">16:30</span>Oleksii M.</div>
+      </div>
+      <div class="cell"><span class="dnum">22</span></div>
+      <div class="cell"><span class="dnum">23</span>
+        <div class="task c-yellow"><span class="time">15:00</span>Philipp R.</div>
+      </div>
+      <div class="cell"><span class="dnum">24</span></div>
+      <div class="cell holiday"><span class="dnum">25</span><span style="font-size:10px;font-weight:600;color:#c92621;">1. Weihnachten</span></div>
+      <div class="cell holiday"><span class="dnum">26</span><span style="font-size:10px;font-weight:600;color:#c92621;">2. Weihnachten</span></div>
+      <div class="cell"><span class="dnum">27</span></div>
+      <div class="cell"><span class="dnum">28</span>
+        <div class="task c-emerald"><span class="time">16:30</span>Armel N.</div>
+      </div>
+      <div class="cell"><span class="dnum">29</span></div>
+      <div class="cell"><span class="dnum">30</span></div>
+      <div class="cell"><span class="dnum">31</span></div>
+      <div class="cell other"><span class="dnum">1</span></div>
+      <div class="cell other"><span class="dnum">2</span></div>
+      <div class="cell other"><span class="dnum">3</span></div>
+    </div>
+    <div class="panel">
+      <div class="glass">
+        <div class="pdate">Samstag, 19. Dezember</div>
+        <div class="psub">2 Termine · 17 Personen</div>
+        <div style="height:10px;"></div>
+        <div class="row">
+          <div class="ic" style="background:linear-gradient(135deg,#40c8d8,#1ba2b5);">ST</div>
+          <div><div class="rt">Sylvio Thiele</div><div class="rs">09:30 · Saal &amp; Zoom · automatisch</div></div>
+          <div class="badge rec">⭐ Empfehlung</div>
+        </div>
+        <div class="row">
+          <div class="ic" style="background:linear-gradient(135deg,#3f9cff,#007aff);">N</div>
+          <div><div class="rt">Gruppe Naumburger</div><div class="rs">09:30 · Saal · außer Konkurrenz</div></div>
+          <div class="badge ok">2 verfügbar</div>
+        </div>
+      </div>
+      <div class="phead">Verfügbarkeit</div>
+      <div class="list">
+        <div class="lrow">Gerd Münzberger <span class="why ok">verfügbar</span></div>
+        <div class="lrow">Markus Pauli <span class="why ok">verfügbar</span></div>
+        <div class="lrow">Dietmar Buhl <span class="why no">nicht qualifiziert</span></div>
+        <div class="lrow">Uwe Jonderko <span class="why no">Gruppentermin an dem Tag</span></div>
+        <div class="lrow">Willi Sonntag <span class="why no">Nachtschicht</span></div>
+      </div>
+      <div class="cta">＋ Aufgabe anlegen</div>
+    </div>
+  </div>
+</body>
+</html>
