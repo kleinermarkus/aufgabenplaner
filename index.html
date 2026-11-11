@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.3';
+    const APP_VERSION = '1.10.4';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1779,6 +1779,31 @@
                           h('button', { onClick: () => { markDeleted('schedule', task.id); setSchedule(schedule.filter(t => t.id !== task.id)); }, className: 'text-rose-500 text-xs' }, 'Entfernen')
                         )
                       ),
+                      h('div', { className: 'flex items-center gap-1.5' },
+                        h('span', { className: 'text-[10px] font-bold text-slate-400' }, '📅 Datum:'),
+                        h('input', {
+                          type: 'date',
+                          value: task.dateStr,
+                          onChange: (e) => {
+                            const nd = e.target.value;
+                            if (!nd || nd === task.dateStr) return;
+                            const slotTime = timeSlots.find(s => s.id === task.slotId)?.time;
+                            const scope = (task.groupIds || []).slice().sort().join(',');
+                            const collision = schedule.some(t => t.id !== task.id && t.dateStr === nd && timeSlots.find(s => s.id === t.slotId)?.time === slotTime && (t.groupIds || []).slice().sort().join(',') === scope);
+                            if (collision) {
+                              showToast('An diesem Datum existiert bereits ein Termin zur gleichen Zeit.', 'error');
+                              return;
+                            }
+                            const ndDate = parseLocalDate(nd);
+                            setSchedule(schedule.map(t => t.id === task.id ? { ...t, dateStr: nd, updatedAt: Date.now() } : t));
+                            setSelectedDateStr(nd);
+                            setCurrentDate(new Date(ndDate.getFullYear(), ndDate.getMonth(), 1));
+                            setEditingTask(null);
+                            showToast(`Termin verschoben auf ${ndDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}.`, 'success');
+                          },
+                          className: 'text-[10px] p-1 border rounded bg-white border-slate-300'
+                        })
+                      ),
                       groups.length > 0 ? h('div', { className: 'flex flex-wrap gap-1 items-center' },
                         h('span', { className: 'text-[9px] font-bold text-slate-400' }, 'Gruppen:'),
                         groups.map(g => {
@@ -1809,7 +1834,7 @@
                         h('div', null,
                           h('label', { className: 'text-[10px] font-bold text-slate-500 block' }, 'Zeitslot'),
                           h('select', { name: 'slotId', defaultValue: task.slotId, className: 'w-full text-xs p-1 border rounded bg-white' },
-                            validSlotsForSelectedDay.map(s => h('option', { key: s.id, value: s.id }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`))
+                            (slot && !validSlotsForSelectedDay.some(s => s.id === slot.id) ? [slot, ...validSlotsForSelectedDay] : validSlotsForSelectedDay).map(s => h('option', { key: s.id, value: s.id }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`))
                           )
                         ),
                         h('div', null,
