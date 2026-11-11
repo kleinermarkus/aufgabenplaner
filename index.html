@@ -37,7 +37,19 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.2';
+    const APP_VERSION = '1.10.3';
+
+    // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
+    const isNewerVersion = (a, b) => {
+      const pa = String(a || '').split('.').map(n => parseInt(n, 10) || 0);
+      const pb = String(b || '').split('.').map(n => parseInt(n, 10) || 0);
+      const len = Math.max(pa.length, pb.length);
+      for (let i = 0; i < len; i++) {
+        const diff = (pa[i] || 0) - (pb[i] || 0);
+        if (diff !== 0) return diff > 0;
+      }
+      return false;
+    };
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -499,7 +511,7 @@
             const res = await fetch(`version.json?ts=${Date.now()}`, { cache: 'no-store' });
             if (!res.ok) return;
             const data = await res.json();
-            if (data.version && data.version !== APP_VERSION) setUpdateAvailable(true);
+            setUpdateAvailable(!!data.version && isNewerVersion(data.version, APP_VERSION));
           } catch (err) {}
         };
         checkVersion();
@@ -1640,7 +1652,13 @@
 
         updateAvailable ? h('div', { className: 'fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white text-sm font-semibold px-4 py-2 flex flex-wrap justify-center items-center gap-3 shadow-lg no-print' },
           '🔄 Eine neue Version ist verfügbar – bitte aktualisieren.',
-          h('button', { onClick: () => location.reload(), className: 'px-3 py-1 bg-white text-amber-700 rounded font-bold text-xs hover:bg-amber-50' }, 'Jetzt aktualisieren')
+          h('button', { onClick: async () => {
+            try {
+              if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); }
+              if (navigator.serviceWorker) { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); }
+            } catch (err) {}
+            location.reload();
+          }, className: 'px-3 py-1 bg-white text-amber-700 rounded font-bold text-xs hover:bg-amber-50' }, 'Jetzt aktualisieren')
         ) : null,
 
         syncOpen ? h('div', { className: 'fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4 no-print', onClick: closeSyncModal },
