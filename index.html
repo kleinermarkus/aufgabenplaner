@@ -36,25 +36,40 @@
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
-    // 3-Schicht-System: Frühschicht (06-14), Spätschicht (14-22), Nachtschicht (22-06)
-    const SHIFTS = [
-      { id: 'frueh', label: 'Frühschicht' },
-      { id: 'spaet', label: 'Spätschicht' },
-      { id: 'nacht', label: 'Nachtschicht' }
-    ];
+    // Externes 3-Schicht-System: Frühschicht (06-14), Spätschicht (14-22), Nachtschicht (22-06)
+    // Nachtschicht blockiert zusätzlich den Folgetag bis 14 Uhr (Frühfenster).
+    const SHIFT_DEFS = {
+      frueh: { label: 'Frühschicht', short: 'F', color: 'bg-amber-100 text-amber-800 border-amber-300' },
+      spaet: { label: 'Spätschicht', short: 'S', color: 'bg-sky-100 text-sky-800 border-sky-300' },
+      nacht: { label: 'Nachtschicht', short: 'N', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+      frei: { label: 'Frei', short: '–', color: 'bg-slate-100 text-slate-500 border-slate-300' }
+    };
+    const SHIFT_CYCLE_ORDER = ['frei', 'frueh', 'spaet', 'nacht'];
+    const DEFAULT_SHIFT_CYCLE = ['frueh', 'frueh', 'spaet', 'spaet', 'nacht', 'nacht', 'frei', 'frei'];
 
-    function getShiftForTime(time) {
-      if (!time) return null;
-      const hour = parseInt(String(time).split(':')[0], 10);
-      if (isNaN(hour)) return null;
-      if (hour >= 6 && hour < 14) return 'frueh';
-      if (hour >= 14 && hour < 22) return 'spaet';
-      return 'nacht';
+    // Externe Schicht einer Person an einem Datum (Rotation ab Startdatum, null = keine Einschränkung)
+    function getExternalShiftForDate(person, dateStr) {
+      const rot = person?.shiftRotation;
+      if (!rot?.enabled || !rot.startDate || !Array.isArray(rot.cycle) || rot.cycle.length === 0) return null;
+      const diff = Math.floor((parseLocalDate(dateStr) - parseLocalDate(rot.startDate)) / 86400000);
+      if (diff < 0) return null;
+      const shift = rot.cycle[diff % rot.cycle.length];
+      return shift && shift !== 'frei' ? shift : null;
     }
 
-    function getShiftLabel(shiftId) {
-      const shift = SHIFTS.find(s => s.id === shiftId);
-      return shift ? shift.label : shiftId;
+    // Liefert Label der blockierenden Schicht oder null, wenn die Person den Zeitslot wahrnehmen kann
+    function getExternalShiftBlock(person, dateStr, slotTime) {
+      const parts = String(slotTime || '').split(':');
+      const hour = parseInt(parts[0], 10) + parseInt(parts[1] || '0', 10) / 60;
+      if (isNaN(hour)) return null;
+      const today = getExternalShiftForDate(person, dateStr);
+      const yesterdayStr = toLocalDateStr(new Date(parseLocalDate(dateStr).getTime() - 86400000));
+      const yesterday = getExternalShiftForDate(person, yesterdayStr);
+      if (today === 'frueh' && hour >= 6 && hour < 14) return 'Frühschicht';
+      if (today === 'spaet' && hour >= 14 && hour < 22) return 'Spätschicht';
+      if (today === 'nacht' && hour >= 22) return 'Nachtschicht';
+      if (yesterday === 'nacht' && hour < 14) return 'Nachtschicht (Folgetag)';
+      return null;
     }
 
     // Sächsische Feiertage dynamisch berechnen
@@ -211,9 +226,9 @@
         const isAbsent = person.absences?.some(abs => dateStr >= abs.start && dateStr <= abs.end);
         if (isAbsent) return { isAvailable: false, reason: 'Abwesend/Urlaub' };
 
-        const taskShift = getShiftForTime(slot.time);
-        if (taskShift && Array.isArray(person.shifts) && !person.shifts.includes(taskShift)) {
-          return { isAvailable: false, reason: `Schicht: ${getShiftLabel(taskShift)}` };
+        const shiftBlock = getExternalShiftBlock(person, dateStr, slot.time);
+        if (shiftBlock) {
+          return { isAvailable: false, reason: `Schicht: ${shiftBlock}` };
         }
 
         const matchSlot = timeSlots.find(s => s.dayOfWeek === slot.dayOfWeek && s.time === slot.time);
@@ -544,7 +559,7 @@
           name: trimmed,
           absences: [],
           matrix: {},
-          shifts: null
+          shiftRotation: null
         };
         setPeople([...people, newPerson]);
         setNewPersonName('');
@@ -913,7 +928,7 @@
             h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4' },
               h('div', null,
                 h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Personen & Qualifikations-Matrix'),
-                h('p', { className: 'text-xs text-slate-500' }, 'Verwalten Sie Personen, Qualifikationen, Schicht-Verfügbarkeit (3-Schicht-System) und tragen Sie Abwesenheiten ein.')
+                h('p', { className: 'text-xs text-slate-500' }, 'Verwalten Sie Personen, Qualifikationen, externe Schichtrhythmen (3-Schicht-System) und Abwesenheiten.')
               ),
               h('div', { className: 'flex flex-wrap items-center gap-3' },
                 h('form', { onSubmit: handleAddPerson, className: 'flex items-center gap-2' },
@@ -941,8 +956,7 @@
                     h('th', { className: 'p-3 border-r sticky top-0 left-0 z-30 bg-slate-50 shadow-xs' }, 'Person'),
                     timeSlots.map(s => locations.map(l => h('th', { key: `${s.id}_${l.id}`, className: 'p-2 border-r text-center font-normal sticky top-0 z-20 bg-slate-50 shadow-xs' },
                       h('div', { className: 'font-bold text-slate-800' }, l.name),
-                      h('div', { className: 'text-[10px] text-slate-500' }, `${DAY_NAMES[s.dayOfWeek]} ${s.time}`),
-                      getShiftForTime(s.time) ? h('div', { className: 'text-[9px] font-semibold text-slate-400' }, getShiftLabel(getShiftForTime(s.time))) : null
+                      h('div', { className: 'text-[10px] text-slate-500' }, `${DAY_NAMES[s.dayOfWeek]} ${s.time}`)
                     )))
                   )
                 ),
@@ -980,43 +994,92 @@
                       h('button', { onClick: () => setPeople(people.filter(person => person.id !== p.id)), className: 'text-rose-500 text-xs font-normal hover:underline' }, 'Löschen')
                     ),
 
-                    // Schichtsystem (3-Schicht)
+                    // Externes Schichtsystem (Rotation)
                     h('div', { className: 'space-y-1.5 pt-1 border-t border-slate-100' },
-                      h('span', { className: 'text-[10px] font-bold text-slate-400 uppercase' }, 'Schichtsystem (3-Schicht)'),
+                      h('span', { className: 'text-[10px] font-bold text-slate-400 uppercase' }, 'Externes Schichtsystem (Rotation)'),
                       h('select', {
-                        value: Array.isArray(p.shifts) ? 'worker' : 'none',
+                        value: p.shiftRotation?.enabled ? 'worker' : 'none',
                         onChange: (e) => {
                           const mode = e.target.value;
                           setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => person.id === p.id
-                            ? { ...person, shifts: mode === 'worker' ? ['frueh', 'spaet', 'nacht'] : null }
+                            ? { ...person, shiftRotation: mode === 'worker' ? { enabled: true, startDate: toLocalDateStr(new Date()), cycle: [...DEFAULT_SHIFT_CYCLE] } : null }
                             : person));
-                          showToast(mode === 'worker' ? 'Person arbeitet im Schichtsystem – Verfügbarkeit anpassen.' : 'Schicht-Einschränkung entfernt.', 'success');
+                          showToast(mode === 'worker' ? 'Schichtrhythmus aktiv – Startdatum und Reihenfolge anpassen.' : 'Schichtrhythmus entfernt.', 'success');
                         },
                         className: 'w-full text-xs p-1.5 border rounded bg-white border-slate-300'
                       },
-                        h('option', { value: 'none' }, 'Kein Schichtsystem (immer verfügbar)'),
-                        h('option', { value: 'worker' }, 'Arbeitet im 3-Schicht-System')
+                        h('option', { value: 'none' }, 'Kein Schichtsystem'),
+                        h('option', { value: 'worker' }, 'Arbeitet extern im Schichtsystem')
                       ),
-                      Array.isArray(p.shifts) ? h('div', { className: 'grid grid-cols-3 gap-1' },
-                        SHIFTS.map(shift => {
-                          const isAvailable = p.shifts.includes(shift.id);
-                          return h('label', { key: shift.id, className: `flex items-center justify-center gap-1 text-[10px] font-semibold px-1 py-1 rounded border cursor-pointer ${isAvailable ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-400'}` },
-                            h('input', {
-                              type: 'checkbox',
-                              checked: isAvailable,
-                              onChange: (e) => {
-                                const next = e.target.checked
-                                  ? [...p.shifts, shift.id]
-                                  : p.shifts.filter(s => s !== shift.id);
-                                setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => person.id === p.id ? { ...person, shifts: next } : person));
-                              },
-                              className: 'w-3 h-3 text-emerald-600 rounded border-slate-300'
+                      p.shiftRotation?.enabled ? h('div', { className: 'space-y-2' },
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-0.5' }, 'Start des Rhythmus (Tag 1 = erste Kachel)'),
+                          h('input', {
+                            type: 'date',
+                            value: p.shiftRotation.startDate || '',
+                            onChange: (e) => {
+                              const val = e.target.value;
+                              setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => person.id === p.id ? { ...person, shiftRotation: { ...person.shiftRotation, startDate: val } } : person));
+                            },
+                            className: 'w-full text-[11px] p-1 border rounded bg-white border-slate-300'
+                          })
+                        ),
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-0.5' }, 'Rhythmus (Kachel antippen: Frei → Früh → Spät → Nacht)'),
+                          h('div', { className: 'flex flex-wrap items-center gap-1' },
+                            p.shiftRotation.cycle.map((dayShift, idx) => {
+                              const def = SHIFT_DEFS[dayShift] || SHIFT_DEFS.frei;
+                              return h('button', {
+                                key: idx,
+                                title: `Tag ${idx + 1}: ${def.label}`,
+                                onClick: () => {
+                                  const nextShift = SHIFT_CYCLE_ORDER[(SHIFT_CYCLE_ORDER.indexOf(dayShift) + 1) % SHIFT_CYCLE_ORDER.length];
+                                  setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => {
+                                    if (person.id !== p.id) return person;
+                                    const cycle = [...person.shiftRotation.cycle];
+                                    cycle[idx] = nextShift;
+                                    return { ...person, shiftRotation: { ...person.shiftRotation, cycle } };
+                                  }));
+                                },
+                                className: `w-8 h-8 text-[10px] font-bold rounded border ${def.color}`
+                              }, def.short);
                             }),
-                            shift.label.replace('schicht', '')
+                            h('button', {
+                              onClick: () => {
+                                setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => person.id === p.id ? { ...person, shiftRotation: { ...person.shiftRotation, cycle: [...person.shiftRotation.cycle, 'frei'] } } : person));
+                              },
+                              title: 'Tag hinzufügen',
+                              className: 'w-8 h-8 text-xs font-bold rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                            }, '+'),
+                            p.shiftRotation.cycle.length > 1 ? h('button', {
+                              onClick: () => {
+                                setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => person.id === p.id ? { ...person, shiftRotation: { ...person.shiftRotation, cycle: person.shiftRotation.cycle.slice(0, -1) } } : person));
+                              },
+                              title: 'Letzten Tag entfernen',
+                              className: 'w-8 h-8 text-xs font-bold rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                            }, '−') : null
+                          )
+                        ),
+                        h('p', { className: 'text-[9px] text-slate-400 leading-snug' },
+                          'Blockiert: Früh 06–14 Uhr · Spät 14–22 Uhr · Nacht 22–06 Uhr und am Folgetag bis 14 Uhr'
+                        ),
+                        p.shiftRotation.startDate ? (() => {
+                          const chips = [];
+                          const today = new Date();
+                          for (let i = 0; i < 7; i++) {
+                            const d = new Date(today);
+                            d.setDate(d.getDate() + i);
+                            const ds = toLocalDateStr(d);
+                            const shift = getExternalShiftForDate({ shiftRotation: p.shiftRotation }, ds);
+                            const def = SHIFT_DEFS[shift || 'frei'];
+                            chips.push(h('span', { key: ds, className: `px-1 py-0.5 rounded border text-[9px] font-semibold ${def.color}` }, `${d.toLocaleDateString('de-DE', { weekday: 'short' })} ${def.short}`));
+                          }
+                          return h('div', { className: 'flex flex-wrap gap-1 items-center' },
+                            h('span', { className: 'text-[9px] text-slate-400' }, 'Nächste 7 Tage:'),
+                            chips
                           );
-                        })
-                      ) : null,
-                      Array.isArray(p.shifts) && p.shifts.length === 0 ? h('p', { className: 'text-[10px] text-rose-600 font-semibold' }, 'Achtung: Bei keiner Schicht verfügbar – keine automatische Zuteilung möglich!') : null
+                        })() : null
+                      ) : null
                     ),
 
                     // Abwesenheits-Liste
@@ -1332,16 +1395,10 @@
                   h('button', { type: 'submit', className: 'bg-indigo-600 text-white text-xs font-bold px-3 py-2 rounded-lg h-9' }, '+ Slot')
                 ),
                 h('div', { className: 'space-y-2' },
-                  timeSlots.map(s => {
-                    const slotShift = getShiftForTime(s.time);
-                    return h('div', { key: s.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center text-xs' },
-                      h('span', { className: 'font-bold flex items-center gap-1.5' },
-                        `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`,
-                        slotShift ? h('span', { className: `text-[9px] px-1.5 py-0.5 rounded font-semibold ${slotShift === 'frueh' ? 'bg-amber-100 text-amber-800' : slotShift === 'spaet' ? 'bg-sky-100 text-sky-800' : 'bg-indigo-100 text-indigo-800'}` }, getShiftLabel(slotShift)) : null
-                      ),
-                      h('button', { onClick: () => setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)), className: 'text-rose-500' }, 'Löschen')
-                    );
-                  })
+                  timeSlots.map(s => h('div', { key: s.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center text-xs' },
+                    h('span', { className: 'font-bold' }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`),
+                    h('button', { onClick: () => setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)), className: 'text-rose-500' }, 'Löschen')
+                  ))
                 )
               )
             ),

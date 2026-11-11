@@ -6,11 +6,23 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 
 Einfach `index.html` in einem Browser öffnen (Internetverbindung nötig, da React/Tailwind per CDN geladen werden). Alle Daten bleiben lokal im Browser (localStorage).
 
-## Schichtarbeit (3-Schicht-System)
+## Schichtarbeit (externes 3-Schicht-System)
 
-Zeitslots werden automatisch einer Schicht zugeordnet: **Frühschicht** (06–14 Uhr), **Spätschicht** (14–22 Uhr) und **Nachtschicht** (22–06 Uhr). Die Schicht wird als Badge in der Slot-Verwaltung und der Qualifikations-Matrix angezeigt.
+Mitarbeiter im externen 3-Schicht-System können pro Person hinterlegt werden: In **Personen & Matrix** unter „Externes Schichtsystem (Rotation)" den Modus „Arbeitet extern im Schichtsystem" wählen.
 
-In **Personen & Matrix** kann pro Person hinterlegt werden, ob sie im 3-Schicht-System arbeitet und bei welchen Schichten sie für Aufgaben zur Verfügung steht. Die automatische Zuteilung, die Empfehlungen und die manuelle Auswahl berücksichtigen diese Einschränkung (nicht verfügbare Personen werden mit der Begründung „Schicht: …“ gekennzeichnet).
+Dazu gehören:
+
+- **Startdatum**: Der Tag, an dem der Rhythmus beginnt (Tag 1 des Musters).
+- **Rhythmus**: Beliebig lange Abfolge von Schicht-Tagen als farbige Kacheln – F = Frühschicht, S = Spätschicht, N = Nachtschicht, – = frei. Kacheln antippen zum Durchschalten, mit +/− die Musterlänge ändern. Standard ist ein 8-Tage-Rhythmus (F F S S N N – –), der sich am Startdatum wiederholt.
+- **Vorschau**: Die nächsten 7 Tage zeigen sofort, welche Schicht an welchem Tag greift.
+
+Daraus ergibt sich automatisch, wann jemand für Aufgaben zur Verfügung steht:
+
+- **Frühschicht** (06–14 Uhr): vormittags blockiert, nachmittags verfügbar
+- **Spätschicht** (14–22 Uhr): nachmittags blockiert, vormittags verfügbar
+- **Nachtschicht** (22–06 Uhr): abends/nachts blockiert **und** am Folgetag bis 14 Uhr (keine Aufgaben am nächsten Morgen)
+
+Die automatische Zuteilung, die Empfehlungen und die manuelle Auswahl berücksichtigen diese Blockierungen (nicht verfügbare Personen werden mit der Begründung „Schicht: …" gekennzeichnet). Vor dem Startdatum besteht keine Einschränkung.
 
 ## Geräte-Synchronisation (WebRTC Data Channels)
 
