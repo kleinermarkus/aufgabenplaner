@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.4.0';
+    const APP_VERSION = '1.5.0';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -225,12 +225,31 @@
       const reconnectAttemptsRef = useRef(0);
       const [syncLog, setSyncLog] = useState(() => JSON.parse(localStorage.getItem('app_synclog')) || []);
 
+      // Lösch-Markierungen (Tombstones): Gelöschte IDs werden gemerkt und mit synchronisiert,
+      // damit Löschungen auf anderen Geräten nicht durch den Union-Merge wiederhergestellt werden.
+      const TOMBSTONE_COLLECTIONS = ['locations', 'timeSlots', 'patterns', 'people', 'schedule', 'absences'];
+      const normalizeTombstones = (raw) => {
+        const base = {};
+        TOMBSTONE_COLLECTIONS.forEach(c => { base[c] = []; });
+        if (!raw || typeof raw !== 'object') return base;
+        TOMBSTONE_COLLECTIONS.forEach(c => {
+          if (Array.isArray(raw[c])) base[c] = [...new Set(raw[c].filter(id => typeof id === 'string' && id))].slice(-500);
+        });
+        return base;
+      };
+      const [tombstones, setTombstones] = useState(() => normalizeTombstones(JSON.parse(localStorage.getItem('app_tombstones'))));
+      const markDeleted = (collection, id) => {
+        if (!id || !TOMBSTONE_COLLECTIONS.includes(collection)) return;
+        setTombstones(prev => normalizeTombstones({ ...prev, [collection]: [...(prev[collection] || []), id] }));
+      };
+
       useEffect(() => localStorage.setItem('app_locs', JSON.stringify(locations)), [locations]);
       useEffect(() => localStorage.setItem('app_slots', JSON.stringify(timeSlots)), [timeSlots]);
       useEffect(() => localStorage.setItem('app_pats', JSON.stringify(patterns)), [patterns]);
       useEffect(() => localStorage.setItem('app_people', JSON.stringify(people)), [people]);
       useEffect(() => localStorage.setItem('app_sched', JSON.stringify(schedule)), [schedule]);
       useEffect(() => localStorage.setItem('app_synclog', JSON.stringify(syncLog)), [syncLog]);
+      useEffect(() => localStorage.setItem('app_tombstones', JSON.stringify(tombstones)), [tombstones]);
 
       // PWA: Service Worker registrieren und periodisch nach einer neuen Server-Version prüfen
       useEffect(() => {
@@ -263,7 +282,7 @@
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
       const SYNC_PREFIX = 'aufgabenplaner-';
 
-      const collectSyncData = () => ({ locations, timeSlots, patterns, people, schedule });
+      const collectSyncData = () => ({ locations, timeSlots, patterns, people, schedule, tombstones });
 
       const mergeById = (local, incoming) => {
         const map = new Map((local || []).map(item => [item.id, item]));
@@ -278,41 +297,66 @@
       const applySyncData = (data) => {
         if (!data || typeof data !== 'object') return;
         suppressSendRef.current = true;
-        const added = { locations: 0, timeSlots: 0, patterns: 0, people: 0, schedule: 0 };
+        const incomingTombstones = normalizeTombstones(data.tombstones);
+        const mergedTombstones = normalizeTombstones(tombstones);
+        TOMBSTONE_COLLECTIONS.forEach(c => {
+          mergedTombstones[c] = [...new Set([...mergedTombstones[c], ...(incomingTombstones[c] || [])])].slice(-500);
+        });
+        const isDeleted = (collection, id) => id && mergedTombstones[collection].includes(id);
+        setTombstones(mergedTombstones);
+        const added = { locations: 0, timeSlots: 0, patterns: 0, people: 0, schedule: 0, deletions: 0 };
         if (Array.isArray(data.locations)) {
-          added.locations = data.locations.filter(i => i && i.id && !locations.some(l => l.id === i.id)).length;
-          setLocations(mergeById(locations, data.locations));
+          const filtered = data.locations.filter(i => i && i.id && !isDeleted('locations', i.id));
+          added.locations = filtered.filter(i => !locations.some(l => l.id === i.id)).length;
+          const keptLocal = locations.filter(l => !isDeleted('locations', l.id));
+          added.deletions += locations.length - keptLocal.length;
+          setLocations(mergeById(keptLocal, filtered));
         }
         if (Array.isArray(data.timeSlots)) {
-          added.timeSlots = data.timeSlots.filter(i => i && i.id && !timeSlots.some(l => l.id === i.id)).length;
-          setTimeSlots(mergeById(timeSlots, data.timeSlots));
+          const filtered = data.timeSlots.filter(i => i && i.id && !isDeleted('timeSlots', i.id));
+          added.timeSlots = filtered.filter(i => !timeSlots.some(l => l.id === i.id)).length;
+          const keptLocal = timeSlots.filter(l => !isDeleted('timeSlots', l.id));
+          added.deletions += timeSlots.length - keptLocal.length;
+          setTimeSlots(mergeById(keptLocal, filtered));
         }
         if (Array.isArray(data.patterns)) {
-          added.patterns = data.patterns.filter(i => i && i.id && !patterns.some(l => l.id === i.id)).length;
-          setPatterns(mergeById(patterns, data.patterns));
+          const filtered = data.patterns.filter(i => i && i.id && !isDeleted('patterns', i.id));
+          added.patterns = filtered.filter(i => !patterns.some(l => l.id === i.id)).length;
+          const keptLocal = patterns.filter(l => !isDeleted('patterns', l.id));
+          added.deletions += patterns.length - keptLocal.length;
+          setPatterns(mergeById(keptLocal, filtered));
         }
         if (Array.isArray(data.schedule)) {
-          added.schedule = data.schedule.filter(i => i && i.id && !schedule.some(l => l.id === i.id)).length;
-          setSchedule(mergeById(schedule, data.schedule));
+          const filtered = data.schedule.filter(i => i && i.id && !isDeleted('schedule', i.id));
+          added.schedule = filtered.filter(i => !schedule.some(l => l.id === i.id)).length;
+          const keptLocal = schedule.filter(l => !isDeleted('schedule', l.id));
+          added.deletions += schedule.length - keptLocal.length;
+          setSchedule(mergeById(keptLocal, filtered));
         }
         if (Array.isArray(data.people)) {
-          const map = new Map(people.map(p => [p.id, p]));
+          const keptLocalPeople = people.filter(p => !isDeleted('people', p.id));
+          added.deletions += people.length - keptLocalPeople.length;
+          const map = new Map(keptLocalPeople.map(p => [p.id, p]));
           data.people.forEach(inc => {
-            if (!inc || !inc.id) return;
+            if (!inc || !inc.id || isDeleted('people', inc.id)) return;
             const cur = map.get(inc.id);
             if (!cur) { added.people++; map.set(inc.id, inc); return; }
             const mergedMatrix = { ...(inc.matrix || {}) };
             Object.entries(cur.matrix || {}).forEach(([key, val]) => { if (val) mergedMatrix[key] = true; });
             map.set(inc.id, {
               ...cur,
-              absences: mergeById(cur.absences, inc.absences),
+              absences: mergeById(
+                (cur.absences || []).filter(a => !isDeleted('absences', a.id)),
+                (inc.absences || []).filter(a => !isDeleted('absences', a.id))
+              ),
               matrix: mergedMatrix,
               shiftRotation: cur.shiftRotation || inc.shiftRotation || null
             });
           });
           setPeople([...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'de')));
         }
-        addSyncLog('empfangen', `Übernommen: ${added.locations} Orte, ${added.timeSlots} Zeitslots, ${added.patterns} Muster, ${added.people} Personen, ${added.schedule} Termine`);
+        const logText = `Übernommen: ${added.locations} Orte, ${added.timeSlots} Zeitslots, ${added.patterns} Muster, ${added.people} Personen, ${added.schedule} Termine` + (added.deletions > 0 ? `, ${added.deletions} Löschungen` : '');
+        addSyncLog('empfangen', logText);
         setTimeout(() => { suppressSendRef.current = false; }, 800);
       };
 
@@ -490,7 +534,7 @@
           }
         }, 500);
         return () => clearTimeout(timer);
-      }, [locations, timeSlots, patterns, people, schedule]);
+      }, [locations, timeSlots, patterns, people, schedule, tombstones]);
 
       // Dauerhafte Kopplung: Gespeicherte Sync-Verbindung beim Start automatisch wiederherstellen
       useEffect(() => {
@@ -769,6 +813,7 @@
           setPatterns(INITIAL_PATTERNS);
           setPeople(INITIAL_PEOPLE);
           setSchedule([]);
+          setTombstones(normalizeTombstones(null));
           showToast('Alle Daten wurden vollständig zurückgesetzt.', 'success');
         }
       };
@@ -777,6 +822,10 @@
 
       const handleClearAllSchedule = () => {
         if (confirm(`Möchten Sie wirklich alle generierten Termine für ${monthNameStr} löschen?`)) {
+          schedule.forEach(t => {
+            const d = parseLocalDate(t.dateStr);
+            if (d.getFullYear() === year && d.getMonth() === month) markDeleted('schedule', t.id);
+          });
           setSchedule(schedule.filter(t => {
             const d = parseLocalDate(t.dateStr);
             return !(d.getFullYear() === year && d.getMonth() === month);
@@ -1209,7 +1258,7 @@
                         h('div', { className: 'font-bold text-xs text-slate-900' }, loc?.name || 'Ort'),
                         h('div', { className: 'flex items-center gap-2' },
                           h('button', { onClick: () => setEditingTask(isEditingThis ? null : task), className: 'text-indigo-600 text-xs font-semibold hover:underline' }, isEditingThis ? '✕ Abbrechen' : '✏️ Ändern'),
-                          h('button', { onClick: () => setSchedule(schedule.filter(t => t.id !== task.id)), className: 'text-rose-500 text-xs' }, 'Entfernen')
+                          h('button', { onClick: () => { markDeleted('schedule', task.id); setSchedule(schedule.filter(t => t.id !== task.id)); }, className: 'text-rose-500 text-xs' }, 'Entfernen')
                         )
                       ),
                       isEditingThis ? h('form', {
@@ -1364,7 +1413,7 @@
                   h('div', { className: 'space-y-3' },
                     h('div', { className: 'font-bold text-sm text-slate-800 flex justify-between items-center' },
                       h('span', null, p.name),
-                      h('button', { onClick: () => setPeople(people.filter(person => person.id !== p.id)), className: 'text-rose-500 text-xs font-normal hover:underline' }, 'Löschen')
+                      h('button', { onClick: () => { (p.absences || []).forEach(abs => markDeleted('absences', abs.id)); markDeleted('people', p.id); setPeople(people.filter(person => person.id !== p.id)); }, className: 'text-rose-500 text-xs font-normal hover:underline' }, 'Löschen')
                     ),
 
                     // Externes Schichtsystem (Rotation)
@@ -1512,7 +1561,7 @@
                               title: 'Bearbeiten'
                             }, '✏️'),
                             h('button', {
-                              onClick: () => setPeople([...people].sort((x, y) => x.name.localeCompare(y.name, 'de')).map(person => person.id === p.id ? { ...person, absences: person.absences.filter(abs => abs.id !== a.id) } : person)),
+                              onClick: () => { markDeleted('absences', a.id); setPeople([...people].sort((x, y) => x.name.localeCompare(y.name, 'de')).map(person => person.id === p.id ? { ...person, absences: person.absences.filter(abs => abs.id !== a.id) } : person)); },
                               className: 'text-rose-500 font-bold',
                               title: 'Löschen'
                             }, '✕')
@@ -1623,7 +1672,7 @@
                             setEditingPattern(pat);
                           }
                         }, className: 'text-indigo-600 font-semibold text-xs hover:underline' }, isEditingThis ? '✕ Abbrechen' : '✏️ Bearbeiten'),
-                        h('button', { onClick: () => setPatterns(patterns.filter(p => p.id !== pat.id)), className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
+                        h('button', { onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
                       )
                     ),
                     isEditingThis ? h('form', {
@@ -1738,7 +1787,7 @@
                 h('div', { className: 'space-y-2' },
                   locations.map(l => h('div', { key: l.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center text-xs' },
                     h('span', { className: 'font-bold' }, l.name),
-                    h('button', { onClick: () => setLocations(locations.filter(loc => loc.id !== l.id)), className: 'text-rose-500' }, 'Löschen')
+                    h('button', { onClick: () => { markDeleted('locations', l.id); setLocations(locations.filter(loc => loc.id !== l.id)); }, className: 'text-rose-500' }, 'Löschen')
                   ))
                 )
               ),
@@ -1770,7 +1819,7 @@
                 h('div', { className: 'space-y-2' },
                   timeSlots.map(s => h('div', { key: s.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center text-xs' },
                     h('span', { className: 'font-bold' }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`),
-                    h('button', { onClick: () => setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)), className: 'text-rose-500' }, 'Löschen')
+                    h('button', { onClick: () => { markDeleted('timeSlots', s.id); setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)); }, className: 'text-rose-500' }, 'Löschen')
                   ))
                 )
               )

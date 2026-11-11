@@ -55,5 +55,7 @@ Im Hintergrund wird ein **Protokoll** geführt (persistiert im Browser, max. 200
 
 Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selbst gehen direkt Gerät-zu-Gerät (peer-to-peer) und werden auf keinem Server gespeichert. Hintergrund-Synchronisierung setzt voraus, dass die App auf beiden Geräten geöffnet (bzw. als PWA installiert) ist.
 
+**Löschungen:** Gelöschte Einträge werden als **Lösch-Markierung (Tombstone)** gemerkt und mit synchronisiert – so werden gelöschte Orte, Zeitslots, Muster, Personen, Abwesenheiten und Termine auf dem anderen Gerät ebenfalls entfernt und nicht durch den Abgleich wiederhergestellt.
+
 **Zusammenführung:** Beide Datensätze werden vereinigt (union by id) – bestehende lokale Einträge bleiben erhalten, neue Einträge vom anderen Gerät werden übernommen. Bei Personen werden Abwesenheiten vereinigt, Matrix-Häkchen kombiniert (aktiv gewinnt) und der Schichtrhythmus übernommen, falls lokal keiner gesetzt ist.
 
