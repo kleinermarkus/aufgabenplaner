@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.8.2';
+    const APP_VERSION = '1.8.3';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -723,12 +723,13 @@
         });
         scheduleList.forEach(t => {
           if (!t.assignedPersonId || t.id === excludeTaskId || counts[t.assignedPersonId] === undefined) return;
-          if (untilDateStr && t.dateStr > untilDateStr) return;
+          const isFuture = untilDateStr && t.dateStr > untilDateStr;
+          if (isFuture && t.assignedBy !== 'manual') return;
           counts[t.assignedPersonId]++;
           const taskDate = parseLocalDate(t.dateStr);
           const wDay = taskDate.getDay();
           weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
-          if (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId]) {
+          if (!isFuture && (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId])) {
             lastAssignedDate[t.assignedPersonId] = t.dateStr;
           }
         });
@@ -742,8 +743,8 @@
         return [...candidates].sort((a, b) => {
           const lastA = stats.lastAssignedDate[a.id] ? parseLocalDate(stats.lastAssignedDate[a.id]) : null;
           const lastB = stats.lastAssignedDate[b.id] ? parseLocalDate(stats.lastAssignedDate[b.id]) : null;
-          const daysA = lastA ? (taskDate - lastA) / 86400000 : Infinity;
-          const daysB = lastB ? (taskDate - lastB) / 86400000 : Infinity;
+          const daysA = lastA ? Math.max(0, (taskDate - lastA) / 86400000) : Infinity;
+          const daysB = lastB ? Math.max(0, (taskDate - lastB) / 86400000) : Infinity;
           if (daysA !== daysB) return daysB - daysA;
 
           const diffCount = stats.counts[a.id] - stats.counts[b.id];
@@ -762,7 +763,7 @@
           return details.isAvailable;
         });
         if (candidates.length === 0) return null;
-        const stats = buildAssignmentStats(schedule, people, task.id, task.dateStr);
+        const stats = buildAssignmentStats(schedule, people, task.id);
         return sortCandidatesByFairness(candidates, task, stats)[0].id;
       };
 
@@ -850,6 +851,14 @@
         // Fairness-Statistiken starten leer und werden chronologisch aufgebaut:
         // nur bereits vergangene bzw. gleichzeitige Einsätze zählen, zukünftige nicht
         const stats = buildAssignmentStats([], people, null, null);
+        // Manuell eingeteilte Termine (auch in der Zukunft) in die Bilanz einrechnen
+        updatedSchedule.forEach(t => {
+          if (t.assignedPersonId && t.assignedBy === 'manual' && stats.counts[t.assignedPersonId] !== undefined) {
+            stats.counts[t.assignedPersonId]++;
+            const wDay = parseLocalDate(t.dateStr).getDay();
+            stats.weekdayCounts[t.assignedPersonId][wDay] = (stats.weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
+          }
+        });
         let histIdx = 0;
 
         let assignedCount = 0;
@@ -857,9 +866,11 @@
           while (histIdx < updatedSchedule.length && updatedSchedule[histIdx].dateStr <= task.dateStr) {
             const hist = updatedSchedule[histIdx];
             if (hist.assignedPersonId && stats.counts[hist.assignedPersonId] !== undefined) {
-              stats.counts[hist.assignedPersonId]++;
-              const wDay = parseLocalDate(hist.dateStr).getDay();
-              stats.weekdayCounts[hist.assignedPersonId][wDay] = (stats.weekdayCounts[hist.assignedPersonId][wDay] || 0) + 1;
+              if (hist.assignedBy !== 'manual') {
+                stats.counts[hist.assignedPersonId]++;
+                const wDay = parseLocalDate(hist.dateStr).getDay();
+                stats.weekdayCounts[hist.assignedPersonId][wDay] = (stats.weekdayCounts[hist.assignedPersonId][wDay] || 0) + 1;
+              }
               if (!stats.lastAssignedDate[hist.assignedPersonId] || hist.dateStr > stats.lastAssignedDate[hist.assignedPersonId]) {
                 stats.lastAssignedDate[hist.assignedPersonId] = hist.dateStr;
               }
@@ -880,7 +891,7 @@
             stats.weekdayCounts[chosen.id][taskWDay] = (stats.weekdayCounts[chosen.id][taskWDay] || 0) + 1;
             stats.lastAssignedDate[chosen.id] = task.dateStr;
             assignedCount++;
-            return { ...task, assignedPersonId: chosen.id, updatedAt: Date.now() };
+            return { ...task, assignedPersonId: chosen.id, assignedBy: 'auto', updatedAt: Date.now() };
           }
           return task;
         });
@@ -945,7 +956,7 @@
           setSchedule(schedule.map(t => {
             const d = parseLocalDate(t.dateStr);
             if (d.getFullYear() === year && d.getMonth() === month) {
-              return { ...t, assignedPersonId: null, updatedAt: Date.now() };
+              return { ...t, assignedPersonId: null, assignedBy: null, updatedAt: Date.now() };
             }
             return t;
           }));
@@ -1405,13 +1416,17 @@
                         const recId = getRecommendedPersonIdForTask(task);
                         const recPerson = people.find(p => p.id === recId);
                         return h('div', { className: 'space-y-1' },
-                          recPerson ? h('div', { className: 'text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded flex items-center gap-1' },
+                          recPerson ? h('button', {
+                            onClick: () => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: recPerson.id, assignedBy: 'manual', updatedAt: Date.now() } : t)),
+                            className: 'text-[10px] text-indigo-700 font-bold bg-indigo-100 hover:bg-indigo-200 px-1.5 py-0.5 rounded flex items-center gap-1',
+                            title: 'Klicken, um die Empfehlung zuzuteilen'
+                          },
                             h('span', null, '⭐ Empfehlung:'),
                             h('span', { className: 'underline' }, recPerson.name)
                           ) : null,
                           h('select', {
                             value: task.assignedPersonId || '',
-                            onChange: (e) => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: e.target.value || null, updatedAt: Date.now() } : t)),
+                            onChange: (e) => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: e.target.value || null, assignedBy: e.target.value ? 'manual' : null, updatedAt: Date.now() } : t)),
                             className: 'w-full text-xs p-1 border rounded bg-white font-semibold'
                           },
                             h('option', { value: '' }, '-- Unbesetzt --'),
@@ -1420,17 +1435,7 @@
                               const isRec = p.id === recId;
                               return h('option', { key: p.id, value: p.id, disabled: !details.isAvailable }, `${p.name} ${isRec ? '⭐ [Empfohlen]' : ''} ${!details.isAvailable ? `(${details.reason})` : ''}`);
                             })
-                          ),
-                        h('div', { className: 'pt-1 mt-1 space-y-0.5 border-t border-slate-100' },
-                          h('span', { className: 'text-[9px] font-bold text-slate-400 uppercase' }, 'Verfügbarkeit'),
-                          [...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(p => {
-                            const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
-                            return h('div', { key: p.id, className: 'flex justify-between items-center gap-2 text-[9px]' },
-                              h('span', { className: details.isAvailable ? 'text-emerald-700 font-semibold' : 'text-slate-400' }, `${details.isAvailable ? '✓' : '✗'} ${p.name}`),
-                              h('span', { className: details.isAvailable ? 'text-emerald-600' : 'text-rose-500 font-medium text-right' }, details.isAvailable ? 'verfügbar' : details.reason)
-                            );
-                          })
-                        )
+                          )
                       );
                       })()
                     );
