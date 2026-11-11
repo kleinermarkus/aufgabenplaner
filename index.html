@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.9.1';
+    const APP_VERSION = '1.9.2';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -820,6 +820,8 @@
         });
         scheduleList.forEach(t => {
           if (!t.assignedPersonId || t.id === excludeTaskId || counts[t.assignedPersonId] === undefined) return;
+          // Gruppen-Termine laufen außer Konkurrenz: Zuteilungen dort zählen in keiner Bilanz
+          if (Array.isArray(t.groupIds) && t.groupIds.length > 0) return;
           const isFuture = untilDateStr && t.dateStr > untilDateStr;
           if (isFuture && t.assignedBy !== 'manual') return;
           counts[t.assignedPersonId]++;
@@ -953,6 +955,7 @@
         const stats = buildAssignmentStats([], people, null, null);
         // Manuell eingeteilte Termine (auch in der Zukunft) in die Bilanz einrechnen
         updatedSchedule.forEach(t => {
+          if (Array.isArray(t.groupIds) && t.groupIds.length > 0) return;
           if (t.assignedPersonId && t.assignedBy === 'manual' && stats.counts[t.assignedPersonId] !== undefined) {
             stats.counts[t.assignedPersonId]++;
             const wDay = parseLocalDate(t.dateStr).getDay();
@@ -965,7 +968,7 @@
         updatedSchedule = updatedSchedule.map(task => {
           while (histIdx < updatedSchedule.length && updatedSchedule[histIdx].dateStr <= task.dateStr) {
             const hist = updatedSchedule[histIdx];
-            if (hist.assignedPersonId && stats.counts[hist.assignedPersonId] !== undefined) {
+            if (hist.assignedPersonId && !(Array.isArray(hist.groupIds) && hist.groupIds.length > 0) && stats.counts[hist.assignedPersonId] !== undefined) {
               if (hist.assignedBy !== 'manual') {
                 stats.counts[hist.assignedPersonId]++;
                 const wDay = parseLocalDate(hist.dateStr).getDay();
@@ -978,6 +981,8 @@
             histIdx++;
           }
           if (task.assignedPersonId) return task;
+          // Gruppen-Termine werden nur manuell zugeteilt
+          if (Array.isArray(task.groupIds) && task.groupIds.length > 0) return task;
 
           const candidates = people.filter(p => {
             const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr, task.groupIds);
@@ -1339,6 +1344,8 @@
         const isSelected = selectedDateStr === dateStr;
         const holidayName = holidays[dateStr];
         const dayTasks = schedule.filter(t => t.dateStr === dateStr);
+        const dayGroupNames = [...new Set(dayTasks.flatMap(t => (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean)))];
+        const dayGroupInitials = dayGroupNames.map(n => getInitials(n)).join('');
 
         dayElements.push(
           h('div', {
@@ -1350,16 +1357,22 @@
           },
             h('div', { className: 'flex justify-between items-start' },
               h('span', { className: `text-xs font-bold px-1.5 py-0.5 rounded ${holidayName ? 'bg-amber-200 text-amber-900' : 'text-slate-700'}` }, dayNum),
-              holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[36px] sm:max-w-[70px]' }, holidayName) : null
+              holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[36px] sm:max-w-[70px]' }, holidayName) : null,
+              dayGroupInitials ? h('span', { title: `Gruppentermin: ${dayGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-indigo-600 text-white rounded-full min-w-[14px] h-[14px] px-0.5 flex items-center justify-center shrink-0' }, dayGroupInitials) : null
             ),
             h('div', { className: 'hidden sm:block space-y-1 overflow-y-auto max-h-[68px] my-1 min-w-0' },
               dayTasks.map(t => {
                 const loc = locations.find(l => l.id === t.locationId);
                 const slot = timeSlots.find(s => s.id === t.slotId);
                 const person = people.find(p => p.id === t.assignedPersonId);
-                return h('div', { key: t.id, className: `p-1 rounded border flex flex-col gap-0.5 min-w-0 ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300'}` },
-                  h('span', { className: 'text-[11px] font-bold truncate' }, person ? person.name : 'Offen'),
-                  h('span', { className: 'text-[9px] opacity-80 truncate' }, `${loc?.name || 'Ort'} · ${slot?.time || ''}`)
+                const taskGroupNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
+                return h('div', { key: t.id, className: `p-1 rounded border flex items-center gap-1 min-w-0 ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300'}` },
+                  taskGroupNames.length > 0 ? h('span', { title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-indigo-600 text-white rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, getInitials(taskGroupNames[0])) : null,
+                  h('span', { className: 'text-[9px] font-bold opacity-90 shrink-0' }, slot?.time || ''),
+                  h('div', { className: 'min-w-0 flex-1 leading-tight' },
+                    h('span', { className: 'text-[11px] font-bold truncate block' }, person ? person.name : 'Offen'),
+                    h('span', { className: 'text-[9px] opacity-80 truncate block' }, loc?.name || 'Ort')
+                  )
                 );
               })
             ),
@@ -1374,7 +1387,8 @@
                   className: `px-0.5 py-0.5 rounded border text-center leading-none ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300 text-rose-700'}`
                 },
                   h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : 'Offen'),
-                  slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null
+                  slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null,
+                  (t.groupIds || []).length > 0 ? h('div', { className: 'text-[7px] font-bold text-indigo-700 mt-0.5' }, dayGroupInitials) : null
                 );
               })
             ) : null

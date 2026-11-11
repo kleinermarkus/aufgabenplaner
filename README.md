@@ -14,8 +14,11 @@ Im Tab **⚙️ Stammdaten & Export** lässt sich das **Bundesland für die Feie
 
 Im Tab **⚙️ Stammdaten & Export** lassen sich **Gruppen** anlegen (z. B. Teams oder Schichtgruppen) und Personen per Klick zuordnen. Einzelnen Aufgaben und wiederkehrenden Mustern können optional **relevante Gruppen** zugewiesen werden (leer = für alle relevant):
 
+- Wiederkehrende Gruppen-Termine werden beim **Termine generieren** automatisch angelegt, bekommen aber **keine automatische Zuteilung** – sie werden manuell vergeben.
+- Zuteilungen auf Gruppen-Terminen laufen **außer Konkurrenz**: Sie haben keinen Einfluss auf die Fairness-Verteilung anderer Termine oder auf die manuelle Empfehlung.
 - Bei der **automatischen Zuteilung** werden Aufgaben mit Gruppen nur an Mitglieder dieser Gruppen vergeben.
 - In der **Verfügbarkeits-Liste** werden Nicht-Mitglieder ausgegraut mit dem Grund „Nicht in relevanter Gruppe“.
+- Im Kalender tragen Gruppen-Termine ein kleines **Indigo-Badge mit dem Gruppen-Kürzel** (oben rechts in der Zelle und am Termin-Chip); mehrere Termine pro Tag sind durch die vorangestellte Uhrzeit klar getrennt.
 - Wird eine Gruppe gelöscht, wird sie automatisch aus allen Terminen und Mustern entfernt.
 
 ## Monatliche Muster
