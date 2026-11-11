@@ -22,6 +22,10 @@
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     }
   </script>
+  <!-- PeerJS (WebRTC Data Channels) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- QRCode -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     @media print {
       body { background: white !important; color: black !important; font-size: 11pt; }
@@ -36,9 +40,9 @@
   <div id="root"></div>
 
   <script>
-    const { useState, useEffect, useMemo, createElement: h } = React;
+    const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.1.0';
+    const APP_VERSION = '1.2.0';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -210,6 +214,12 @@
 
       const [toast, setToast] = useState(null);
       const [updateAvailable, setUpdateAvailable] = useState(false);
+      const [syncOpen, setSyncOpen] = useState(false);
+      const [sync, setSync] = useState(null);
+      const [syncCodeInput, setSyncCodeInput] = useState('');
+      const syncPeerRef = useRef(null);
+      const syncConnRef = useRef(null);
+      const qrRef = useRef(null);
 
       useEffect(() => localStorage.setItem('app_locs', JSON.stringify(locations)), [locations]);
       useEffect(() => localStorage.setItem('app_slots', JSON.stringify(timeSlots)), [timeSlots]);
@@ -244,6 +254,158 @@
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3500);
       };
+
+      // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
+      const SYNC_PREFIX = 'aufgabenplaner-';
+
+      const collectSyncData = () => ({ locations, timeSlots, patterns, people, schedule });
+
+      const mergeById = (local, incoming) => {
+        const map = new Map((local || []).map(item => [item.id, item]));
+        (incoming || []).forEach(item => { if (item && item.id && !map.has(item.id)) map.set(item.id, item); });
+        return [...map.values()];
+      };
+
+      const applySyncData = (data) => {
+        if (!data || typeof data !== 'object') return;
+        const added = { locations: 0, timeSlots: 0, patterns: 0, people: 0, schedule: 0 };
+        if (Array.isArray(data.locations)) {
+          added.locations = data.locations.filter(i => i && i.id && !locations.some(l => l.id === i.id)).length;
+          setLocations(mergeById(locations, data.locations));
+        }
+        if (Array.isArray(data.timeSlots)) {
+          added.timeSlots = data.timeSlots.filter(i => i && i.id && !timeSlots.some(l => l.id === i.id)).length;
+          setTimeSlots(mergeById(timeSlots, data.timeSlots));
+        }
+        if (Array.isArray(data.patterns)) {
+          added.patterns = data.patterns.filter(i => i && i.id && !patterns.some(l => l.id === i.id)).length;
+          setPatterns(mergeById(patterns, data.patterns));
+        }
+        if (Array.isArray(data.schedule)) {
+          added.schedule = data.schedule.filter(i => i && i.id && !schedule.some(l => l.id === i.id)).length;
+          setSchedule(mergeById(schedule, data.schedule));
+        }
+        if (Array.isArray(data.people)) {
+          const map = new Map(people.map(p => [p.id, p]));
+          data.people.forEach(inc => {
+            if (!inc || !inc.id) return;
+            const cur = map.get(inc.id);
+            if (!cur) { added.people++; map.set(inc.id, inc); return; }
+            const mergedMatrix = { ...(inc.matrix || {}) };
+            Object.entries(cur.matrix || {}).forEach(([key, val]) => { if (val) mergedMatrix[key] = true; });
+            map.set(inc.id, {
+              ...cur,
+              absences: mergeById(cur.absences, inc.absences),
+              matrix: mergedMatrix,
+              shiftRotation: cur.shiftRotation || inc.shiftRotation || null
+            });
+          });
+          setPeople([...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'de')));
+        }
+        showToast(`Sync übernommen: ${added.locations} Orte, ${added.timeSlots} Zeitslots, ${added.patterns} Muster, ${added.people} Personen, ${added.schedule} Termine.`, 'success');
+      };
+
+      const teardownSync = () => {
+        if (syncConnRef.current) { try { syncConnRef.current.close(); } catch (err) {} syncConnRef.current = null; }
+        if (syncPeerRef.current) { try { syncPeerRef.current.destroy(); } catch (err) {} syncPeerRef.current = null; }
+      };
+
+      const resetSync = () => {
+        teardownSync();
+        setSync(null);
+        setSyncCodeInput('');
+      };
+
+      const closeSyncModal = () => {
+        resetSync();
+        setSyncOpen(false);
+      };
+
+      const startSyncHost = () => {
+        if (typeof Peer === 'undefined') {
+          showToast('PeerJS nicht geladen – bitte Internetverbindung prüfen.', 'error');
+          return;
+        }
+        const code = String(Math.floor(10000000 + Math.random() * 90000000));
+        setSync({ role: 'host', code, status: 'waiting' });
+        const peer = new Peer(SYNC_PREFIX + code);
+        syncPeerRef.current = peer;
+        peer.on('connection', (conn) => {
+          syncConnRef.current = conn;
+          conn.on('open', () => {
+            setSync(s => (s ? { ...s, status: 'connected' } : s));
+            conn.send(collectSyncData());
+          });
+          conn.on('data', (data) => applySyncData(data));
+          conn.on('close', () => setSync(s => (s && s.status === 'connected' ? { ...s, status: 'closed' } : s)));
+        });
+        peer.on('error', (err) => {
+          teardownSync();
+          setSync({ role: 'host', code, status: 'error', message: err.type === 'unavailable-id' ? 'Code belegt – bitte erneut versuchen.' : `Verbindungsfehler: ${err.type}` });
+        });
+      };
+
+      const connectSyncAsClient = (e) => {
+        if (e) e.preventDefault();
+        if (typeof Peer === 'undefined') {
+          showToast('PeerJS nicht geladen – bitte Internetverbindung prüfen.', 'error');
+          return;
+        }
+        if (!/^\d{8}$/.test(syncCodeInput)) {
+          showToast('Bitte einen 8-stelligen Sync-Code eingeben.', 'error');
+          return;
+        }
+        setSync({ role: 'client', code: syncCodeInput, status: 'connecting' });
+        const peer = new Peer();
+        syncPeerRef.current = peer;
+        peer.on('open', () => {
+          const conn = peer.connect(SYNC_PREFIX + syncCodeInput, { reliable: true });
+          syncConnRef.current = conn;
+          conn.on('open', () => {
+            setSync(s => (s ? { ...s, status: 'connected' } : s));
+            conn.send(collectSyncData());
+          });
+          conn.on('data', (data) => applySyncData(data));
+        });
+        peer.on('error', (err) => {
+          teardownSync();
+          setSync({ role: 'client', code: syncCodeInput, status: 'error', message: err.type === 'peer-unavailable' ? 'Kein Gerät mit diesem Code gefunden.' : `Verbindungsfehler: ${err.type}` });
+        });
+      };
+
+      const copySyncCode = async () => {
+        if (!sync?.code) return;
+        try {
+          await navigator.clipboard.writeText(sync.code);
+          showToast('Sync-Code kopiert!', 'success');
+        } catch (err) {
+          const ta = document.createElement('textarea');
+          ta.value = sync.code;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          showToast('Sync-Code kopiert!', 'success');
+        }
+      };
+
+      const pasteSyncCode = async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          const digits = (text || '').replace(/\D/g, '').slice(0, 8);
+          if (digits) setSyncCodeInput(digits);
+          else showToast('Zwischenablage enthält keinen Code.', 'error');
+        } catch (err) {
+          showToast('Zwischenablage nicht verfügbar – bitte Code manuell eingeben.', 'error');
+        }
+      };
+
+      useEffect(() => {
+        if (syncOpen && sync && sync.role === 'host' && sync.code && qrRef.current && typeof QRCode !== 'undefined') {
+          qrRef.current.innerHTML = '';
+          new QRCode(qrRef.current, { text: sync.code, width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
+        }
+      }, [syncOpen, sync]);
 
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
@@ -823,12 +985,61 @@
             h('button', { onClick: () => setActiveTab('patterns'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'patterns' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '🔄 Wiederkehrende Muster'),
             h('button', { onClick: () => setActiveTab('stats'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'stats' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '📊 Statistik'),
             h('button', { onClick: () => setActiveTab('settings'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'settings' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '⚙️ Stammdaten & Export')
-          )
+          ),
+          h('button', { onClick: () => setSyncOpen(true), className: 'px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg no-print' }, '🔄 Geräte-Sync')
         ),
 
         updateAvailable ? h('div', { className: 'fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white text-sm font-semibold px-4 py-2 flex flex-wrap justify-center items-center gap-3 shadow-lg no-print' },
           '🔄 Eine neue Version ist verfügbar – bitte aktualisieren.',
           h('button', { onClick: () => location.reload(), className: 'px-3 py-1 bg-white text-amber-700 rounded font-bold text-xs hover:bg-amber-50' }, 'Jetzt aktualisieren')
+        ) : null,
+
+        syncOpen ? h('div', { className: 'fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4 no-print', onClick: closeSyncModal },
+          h('div', { className: 'bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4', onClick: (e) => e.stopPropagation() },
+            h('div', { className: 'flex justify-between items-center' },
+              h('h2', { className: 'text-lg font-bold text-slate-900' }, '🔄 Geräte-Sync'),
+              h('button', { onClick: closeSyncModal, className: 'text-slate-400 hover:text-slate-600 text-xl font-bold' }, '✕')
+            ),
+            h('p', { className: 'text-xs text-slate-500' }, 'Orte, Zeitslots, Muster, Personen, Abwesenheiten und Termine werden direkt Gerät-zu-Gerät übertragen (peer-to-peer, kein Server speichert die Daten).'),
+
+            sync && sync.status === 'waiting' ? h('div', { className: 'p-4 rounded-lg bg-indigo-50 border border-indigo-200 space-y-3 text-center' },
+              h('p', { className: 'text-xs font-semibold text-indigo-700' }, 'Warte auf das zweite Gerät…'),
+              h('div', { ref: qrRef, className: 'flex justify-center' }),
+              h('div', { className: 'text-2xl font-mono font-bold tracking-[0.3em] text-slate-800' }, sync.code),
+              h('button', { onClick: copySyncCode, className: 'w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg' }, '📋 Code kopieren'),
+              h('p', { className: 'text-[10px] text-slate-500' }, 'Auf dem zweiten Gerät „Mit Code verbinden“ wählen und den Code eingeben oder einfügen.')
+            ) : null,
+
+            sync && sync.status === 'connecting' ? h('div', { className: 'p-3 rounded-lg bg-indigo-50 border border-indigo-200 text-xs font-semibold text-indigo-700 text-center' }, `Verbinde mit Code ${sync.code}…`) : null,
+            sync && sync.status === 'connected' ? h('div', { className: 'p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 text-center' }, '✅ Verbunden – Plandaten werden in beide Richtungen übertragen. Du kannst dieses Fenster schließen.') : null,
+            sync && sync.status === 'closed' ? h('div', { className: 'p-3 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600 text-center' }, 'Verbindung getrennt.') : null,
+            sync && sync.status === 'error' ? h('div', { className: 'p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 text-center' }, sync.message || 'Verbindungsfehler.') : null,
+
+            (!sync || sync.status === 'closed' || sync.status === 'error') ? h('div', { className: 'space-y-4' },
+              h('div', { className: 'space-y-2' },
+                h('h3', { className: 'text-sm font-bold text-slate-800' }, '1. Dieses Gerät: Sync starten'),
+                h('button', { onClick: startSyncHost, className: 'w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg' }, 'Sync starten (Code erzeugen)')
+              ),
+              h('div', { className: 'space-y-2' },
+                h('h3', { className: 'text-sm font-bold text-slate-800' }, '2. Zweites Gerät: Mit Code verbinden'),
+                h('form', { onSubmit: connectSyncAsClient, className: 'flex gap-2' },
+                  h('input', {
+                    type: 'text',
+                    inputMode: 'numeric',
+                    maxLength: 8,
+                    placeholder: '8-stelliger Code',
+                    value: syncCodeInput,
+                    onChange: (e) => setSyncCodeInput(e.target.value.replace(/\D/g, '').slice(0, 8)),
+                    className: 'flex-1 text-sm p-2 border rounded-lg font-mono tracking-widest bg-white border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500'
+                  }),
+                  h('button', { type: 'submit', className: 'bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-4 rounded-lg' }, 'Verbinden')
+                ),
+                h('button', { onClick: pasteSyncCode, className: 'text-xs text-indigo-600 hover:underline font-semibold' }, '📋 Code aus Zwischenablage einfügen')
+              )
+            ) : null,
+
+            sync && sync.status !== 'closed' && sync.status !== 'error' ? h('button', { onClick: resetSync, className: 'w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg' }, 'Abbrechen / Zurücksetzen') : null
+          )
         ) : null,
 
         toast ? h('div', { className: `fixed bottom-4 right-4 z-50 px-4 py-2.5 rounded-lg shadow-lg text-white font-medium text-sm ${toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}` }, toast.msg) : null,

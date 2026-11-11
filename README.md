@@ -34,10 +34,13 @@ Beim Aktualisieren einer neuen Version: `APP_VERSION` in `index.html` **und** `v
 
 ## Geräte-Synchronisation (WebRTC Data Channels)
 
-Über den Button **🔄 Geräte-Sync** können zwei Geräte direkt peer-to-peer synchronisiert werden:
+Über den Button **🔄 Geräte-Sync** im Kopf können zwei Geräte direkt peer-to-peer synchronisiert werden:
 
-1. **Gerät 1:** „Sync starten“ erzeugt einen 8-stelligen Sync-Code – als QR-Code **und** als Text mit Kopieren-Button.
-2. **Gerät 2:** „Mit Code verbinden“ – Code eingeben (oder einfügen) und verbinden.
-3. Verbunden: Orte, Zeitslots, Muster, Personen, Abwesenheiten und Termine werden automatisch in beide Richtungen übertragen.
+1. **Gerät 1:** „Sync starten“ erzeugt einen 8-stelligen Sync-Code – angezeigt als **QR-Code** und als **Text mit Kopieren-Button** (📋 Code kopieren).
+2. **Gerät 2:** „Mit Code verbinden“ – den Code ins Textfeld **eingeben oder per Zwischenablage einfügen** (📋 Code aus Zwischenablage einfügen) und verbinden.
+3. Verbunden: Orte, Zeitslots, Muster, Personen (inkl. Abwesenheiten, Matrix und Schichtrhythmus) und Termine werden automatisch **in beide Richtungen** übertragen.
 
 Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selbst gehen direkt Gerät-zu-Gerät (peer-to-peer) und werden auf keinem Server gespeichert.
+
+**Zusammenführung:** Beide Datensätze werden vereinigt (union by id) – bestehende lokale Einträge bleiben erhalten, neue Einträge vom anderen Gerät werden übernommen. Bei Personen werden Abwesenheiten vereinigt, Matrix-Häkchen kombiniert (aktiv gewinnt) und der Schichtrhythmus übernommen, falls lokal keiner gesetzt ist.
+
