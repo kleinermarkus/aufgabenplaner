@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.3.0';
+    const APP_VERSION = '1.4.0';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -221,6 +221,8 @@
       const syncConnRef = useRef(null);
       const qrRef = useRef(null);
       const suppressSendRef = useRef(false);
+      const connectTimerRef = useRef(null);
+      const reconnectAttemptsRef = useRef(0);
       const [syncLog, setSyncLog] = useState(() => JSON.parse(localStorage.getItem('app_synclog')) || []);
 
       useEffect(() => localStorage.setItem('app_locs', JSON.stringify(locations)), [locations]);
@@ -314,6 +316,17 @@
         setTimeout(() => { suppressSendRef.current = false; }, 800);
       };
 
+      const PAIRING_KEY = 'app_sync_pairing';
+
+      const getPairing = () => {
+        try {
+          const data = JSON.parse(localStorage.getItem(PAIRING_KEY));
+          return data && data.role && data.code ? data : null;
+        } catch (err) {
+          return null;
+        }
+      };
+
       const teardownSync = () => {
         if (syncConnRef.current) { try { syncConnRef.current.close(); } catch (err) {} syncConnRef.current = null; }
         if (syncPeerRef.current) { try { syncPeerRef.current.destroy(); } catch (err) {} syncPeerRef.current = null; }
@@ -322,73 +335,115 @@
       const closeSyncModal = () => setSyncOpen(false);
 
       const disconnectSync = () => {
+        localStorage.removeItem(PAIRING_KEY);
+        if (connectTimerRef.current) { clearTimeout(connectTimerRef.current); connectTimerRef.current = null; }
         teardownSync();
         setSync(s => (s ? { ...s, status: 'closed' } : s));
         setSyncCodeInput('');
-        addSyncLog('info', 'Verbindung getrennt');
+        addSyncLog('info', 'Verbindung getrennt und Kopplung gelöscht');
       };
 
-      const startSyncHost = () => {
+      const scheduleReconnect = (role, code, delay = 10000) => {
+        if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+        reconnectAttemptsRef.current += 1;
+        connectTimerRef.current = setTimeout(() => {
+          connectTimerRef.current = null;
+          const pairing = getPairing();
+          if (!pairing || pairing.role !== role || pairing.code !== code) return;
+          if (reconnectAttemptsRef.current % 5 === 1) {
+            addSyncLog('info', `Automatischer Wiederverbindungsversuch (Code ${code})…`);
+          }
+          establishSync(role, code);
+        }, delay);
+      };
+
+      const attachConnHandlers = (conn) => {
+        conn.on('open', () => {
+          reconnectAttemptsRef.current = 0;
+          setSync(s => (s ? { ...s, status: 'connected' } : s));
+          addSyncLog('info', 'Verbindung hergestellt – Anfangsabgleich läuft');
+          conn.send(collectSyncData());
+        });
+        conn.on('data', (data) => applySyncData(data));
+        conn.on('close', () => {
+          setSync(s => (s && s.status === 'connected' ? { ...s, status: 'closed' } : s));
+          addSyncLog('info', 'Verbindung getrennt');
+          const pairing = getPairing();
+          if (pairing) scheduleReconnect(pairing.role, pairing.code);
+        });
+      };
+
+      const establishSync = (role, code) => {
         if (typeof Peer === 'undefined') {
           showToast('PeerJS nicht geladen – bitte Internetverbindung prüfen.', 'error');
           return;
         }
-        const code = String(Math.floor(10000000 + Math.random() * 90000000));
-        setSync({ role: 'host', code, status: 'waiting' });
-        addSyncLog('info', `Sync gestartet – warte auf zweites Gerät (Code ${code})`);
-        const peer = new Peer(SYNC_PREFIX + code);
+        if (syncPeerRef.current) return;
+        setSync({ role, code, status: role === 'host' ? 'waiting' : 'connecting' });
+        const peer = role === 'host' ? new Peer(SYNC_PREFIX + code) : new Peer();
         syncPeerRef.current = peer;
-        peer.on('connection', (conn) => {
-          syncConnRef.current = conn;
-          conn.on('open', () => {
-            setSync(s => (s ? { ...s, status: 'connected' } : s));
-            addSyncLog('info', 'Verbindung hergestellt – Anfangsabgleich läuft');
-            conn.send(collectSyncData());
+        peer.on('open', () => {
+          if (role === 'client') {
+            const conn = peer.connect(SYNC_PREFIX + code, { reliable: true });
+            syncConnRef.current = conn;
+            attachConnHandlers(conn);
+          }
+        });
+        if (role === 'host') {
+          peer.on('connection', (conn) => {
+            if (syncConnRef.current && syncConnRef.current !== conn) {
+              try { syncConnRef.current.close(); } catch (err) {}
+            }
+            syncConnRef.current = conn;
+            attachConnHandlers(conn);
           });
-          conn.on('data', (data) => applySyncData(data));
-          conn.on('close', () => {
-            setSync(s => (s && s.status === 'connected' ? { ...s, status: 'closed' } : s));
-            addSyncLog('info', 'Verbindung getrennt');
-          });
+        }
+        peer.on('disconnected', () => {
+          addSyncLog('info', 'Signaling-Verbindung verloren – Neuanmeldung läuft…');
+          try { peer.reconnect(); } catch (err) {}
         });
         peer.on('error', (err) => {
           teardownSync();
-          const hostMsg = err.type === 'unavailable-id' ? 'Code belegt – bitte erneut versuchen.' : `Verbindungsfehler: ${err.type}`;
-          addSyncLog('info', `Fehler: ${hostMsg}`);
-          setSync({ role: 'host', code, status: 'error', message: hostMsg });
+          let msg = `Verbindungsfehler: ${err.type}`;
+          if (err.type === 'peer-unavailable') {
+            msg = 'Kein Gerät mit diesem Code gefunden.';
+            const pairing = getPairing();
+            if (pairing) {
+              scheduleReconnect(pairing.role, pairing.code);
+              addSyncLog('info', `${msg} – automatischer Wiederholungsversuch folgt.`);
+              setSync(s => (s ? { ...s, status: 'connecting' } : s));
+              return;
+            }
+          } else if (err.type === 'unavailable-id') {
+            msg = 'Code belegt – bitte erneut versuchen.';
+          }
+          addSyncLog('info', `Fehler: ${msg}`);
+          setSync(s => (s ? { ...s, status: 'error', message: msg } : s));
+          const pairing = getPairing();
+          if (pairing && (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed')) {
+            scheduleReconnect(pairing.role, pairing.code);
+          }
         });
+      };
+
+      const startSyncHost = () => {
+        const code = String(Math.floor(10000000 + Math.random() * 90000000));
+        localStorage.setItem(PAIRING_KEY, JSON.stringify({ role: 'host', code }));
+        reconnectAttemptsRef.current = 0;
+        addSyncLog('info', `Sync gestartet – warte auf zweites Gerät (Code ${code}). Kopplung wird dauerhaft gespeichert.`);
+        establishSync('host', code);
       };
 
       const connectSyncAsClient = (e) => {
         if (e) e.preventDefault();
-        if (typeof Peer === 'undefined') {
-          showToast('PeerJS nicht geladen – bitte Internetverbindung prüfen.', 'error');
-          return;
-        }
         if (!/^\d{8}$/.test(syncCodeInput)) {
           showToast('Bitte einen 8-stelligen Sync-Code eingeben.', 'error');
           return;
         }
-        setSync({ role: 'client', code: syncCodeInput, status: 'connecting' });
-        addSyncLog('info', `Verbinde mit Code ${syncCodeInput}…`);
-        const peer = new Peer();
-        syncPeerRef.current = peer;
-        peer.on('open', () => {
-          const conn = peer.connect(SYNC_PREFIX + syncCodeInput, { reliable: true });
-          syncConnRef.current = conn;
-          conn.on('open', () => {
-            setSync(s => (s ? { ...s, status: 'connected' } : s));
-            addSyncLog('info', 'Verbindung hergestellt – Anfangsabgleich läuft');
-            conn.send(collectSyncData());
-          });
-          conn.on('data', (data) => applySyncData(data));
-        });
-        peer.on('error', (err) => {
-          teardownSync();
-          const clientMsg = err.type === 'peer-unavailable' ? 'Kein Gerät mit diesem Code gefunden.' : `Verbindungsfehler: ${err.type}`;
-          addSyncLog('info', `Fehler: ${clientMsg}`);
-          setSync({ role: 'client', code: syncCodeInput, status: 'error', message: clientMsg });
-        });
+        localStorage.setItem(PAIRING_KEY, JSON.stringify({ role: 'client', code: syncCodeInput }));
+        reconnectAttemptsRef.current = 0;
+        addSyncLog('info', `Verbinde mit Code ${syncCodeInput}… Kopplung wird dauerhaft gespeichert.`);
+        establishSync('client', syncCodeInput);
       };
 
       const copySyncCode = async () => {
@@ -436,6 +491,18 @@
         }, 500);
         return () => clearTimeout(timer);
       }, [locations, timeSlots, patterns, people, schedule]);
+
+      // Dauerhafte Kopplung: Gespeicherte Sync-Verbindung beim Start automatisch wiederherstellen
+      useEffect(() => {
+        const pairing = getPairing();
+        if (pairing) {
+          addSyncLog('info', `Gespeicherte Kopplung gefunden (Code ${pairing.code}) – Verbindung wird wiederhergestellt…`);
+          establishSync(pairing.role, pairing.code);
+        }
+        return () => {
+          if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+        };
+      }, []);
 
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
@@ -1002,6 +1069,7 @@
       const validSlotsForSelectedDay = timeSlots.filter(s => s.dayOfWeek === selectedDayOfWeek);
 
       const syncConnected = sync?.status === 'connected';
+      const syncPending = sync?.status === 'waiting' || sync?.status === 'connecting';
 
       return h('div', { className: 'min-h-screen pb-12' },
         // Header
@@ -1018,7 +1086,7 @@
             h('button', { onClick: () => setActiveTab('stats'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'stats' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '📊 Statistik'),
             h('button', { onClick: () => setActiveTab('settings'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'settings' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '⚙️ Stammdaten & Export')
           ),
-          h('button', { onClick: () => setSyncOpen(true), className: `px-3 py-1.5 text-white text-sm font-medium rounded-lg no-print ${syncConnected ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-800 hover:bg-slate-900'}` }, syncConnected ? '🟢 Sync aktiv' : '🔄 Geräte-Sync')
+          h('button', { onClick: () => setSyncOpen(true), className: `px-3 py-1.5 text-white text-sm font-medium rounded-lg no-print ${syncConnected ? 'bg-emerald-600 hover:bg-emerald-700' : syncPending ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-900'}` }, syncConnected ? '🟢 Sync aktiv' : syncPending ? '🟡 Sync verbindet…' : '🔄 Geräte-Sync')
         ),
 
         updateAvailable ? h('div', { className: 'fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white text-sm font-semibold px-4 py-2 flex flex-wrap justify-center items-center gap-3 shadow-lg no-print' },
@@ -1043,8 +1111,8 @@
             ) : null,
 
             sync && sync.status === 'connecting' ? h('div', { className: 'p-3 rounded-lg bg-indigo-50 border border-indigo-200 text-xs font-semibold text-indigo-700 text-center' }, `Verbinde mit Code ${sync.code}…`) : null,
-            sync && sync.status === 'connected' ? h('div', { className: 'p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 text-center' }, '✅ Verbunden – Änderungen werden automatisch in beide Richtungen synchronisiert. Du kannst dieses Fenster schließen.') : null,
-            sync && sync.status === 'closed' ? h('div', { className: 'p-3 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600 text-center' }, 'Verbindung getrennt.') : null,
+            sync && sync.status === 'connected' ? h('div', { className: 'p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 text-center' }, '✅ Verbunden – Änderungen werden automatisch in beide Richtungen synchronisiert. Die Kopplung bleibt dauerhaft bestehen, auch nach dem Schließen oder Neuladen der App.') : null,
+            sync && sync.status === 'closed' ? h('div', { className: 'p-3 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600 text-center' }, 'Verbindung getrennt – es wird automatisch wieder verbunden, sobald das andere Gerät erreichbar ist.') : null,
             sync && sync.status === 'error' ? h('div', { className: 'p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 text-center' }, sync.message || 'Verbindungsfehler.') : null,
 
             (!sync || sync.status === 'closed' || sync.status === 'error') ? h('div', { className: 'space-y-4' },
@@ -1067,10 +1135,11 @@
                   h('button', { type: 'submit', className: 'bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-4 rounded-lg' }, 'Verbinden')
                 ),
                 h('button', { onClick: pasteSyncCode, className: 'text-xs text-indigo-600 hover:underline font-semibold' }, '📋 Code aus Zwischenablage einfügen')
-              )
+              ),
+              h('p', { className: 'text-[10px] text-slate-500' }, 'Die Kopplung wird dauerhaft gespeichert: Beim nächsten Öffnen der App verbindet sich dieses Gerät automatisch wieder und synchronisiert im Hintergrund.')
             ) : null,
 
-            sync && sync.status !== 'closed' && sync.status !== 'error' ? h('button', { onClick: disconnectSync, className: 'w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg' }, '🔌 Verbindung trennen') : null,
+            sync && sync.status !== 'closed' && sync.status !== 'error' ? h('button', { onClick: disconnectSync, className: 'w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg' }, '🔌 Verbindung trennen (Kopplung löschen)') : null,
 
             h('div', { className: 'space-y-2 pt-2 border-t border-slate-100' },
               h('div', { className: 'flex justify-between items-center' },

@@ -38,15 +38,22 @@ Beim Aktualisieren einer neuen Version: `APP_VERSION` in `index.html` **und** `v
 
 1. **Gerät 1:** „Sync starten“ erzeugt einen 8-stelligen Sync-Code – angezeigt als **QR-Code** und als **Text mit Kopieren-Button** (📋 Code kopieren).
 2. **Gerät 2:** „Mit Code verbinden“ – den Code ins Textfeld **eingeben oder per Zwischenablage einfügen** (📋 Code aus Zwischenablage einfügen) und verbinden.
-3. **Automatische Synchronisierung:** Nach dem ersten Abgleich bleiben die Geräte verbunden – jede Änderung (Orte, Zeitslots, Muster, Personen, Abwesenheiten, Schichtrhythmen, Termine) wird automatisch in beide Richtungen übertragen, ohne erneuten Code-Austausch. Bei aktiver Verbindung zeigt der Kopf-Button **🟢 Sync aktiv**.
+3. **Automatische Live-Synchronisierung:** Nach dem ersten Abgleich werden alle Änderungen automatisch in beide Richtungen übertragen – solange beide Geräte die App geöffnet haben.
 
-Der Dialog kann jederzeit über den Kopf-Button geöffnet werden; das Schließen des Fensters beendet die Verbindung nicht – getrennt wird explizit über **🔌 Verbindung trennen**.
+### Dauerhafte Kopplung
+
+Die Sync-Verbindung wird **dauerhaft gespeichert**:
+
+- Beim nächsten Öffnen der App verbindet sich das Gerät **automatisch wieder** mit dem gekoppelten Gerät – kein erneuter Code-Austausch.
+- Bricht die Verbindung ab (z. B. Netzwerkwechsel, das andere Gerät ist offline), wird **automatisch alle 10 Sekunden** erneut verbunden, bis es wieder klappt.
+- Status im Kopf: **🟢 Sync aktiv** (verbunden), **🟡 Sync verbindet…** (Wiederverbindungsversuch läuft) oder **🔄 Geräte-Sync** (nicht gekoppelt).
+- Die Kopplung lösen: **🔌 Verbindung trennen (Kopplung löschen)** im Sync-Dialog.
 
 ### Sync-Protokoll
 
-Im Hintergrund wird ein **Protokoll** geführt (persistiert im Browser, max. 200 Einträge): Verbindungsstatus, gesendete (↑) und empfangene (↓) Übertragungen mit Zeitstempel sowie Fehler. Einsehbar im Geräte-Sync-Dialog unten unter **📜 Sync-Protokoll**, dort auch per Button löschbar.
+Im Hintergrund wird ein **Protokoll** geführt (persistiert im Browser, max. 200 Einträge): Verbindungsstatus, Wiederverbindungsversuche, gesendete (↑) und empfangene (↓) Übertragungen mit Zeitstempel sowie Fehler. Einsehbar im Geräte-Sync-Dialog unten unter **📜 Sync-Protokoll**, dort auch per Button löschbar.
 
-Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selbst gehen direkt Gerät-zu-Gerät (peer-to-peer) und werden auf keinem Server gespeichert.
+Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selbst gehen direkt Gerät-zu-Gerät (peer-to-peer) und werden auf keinem Server gespeichert. Hintergrund-Synchronisierung setzt voraus, dass die App auf beiden Geräten geöffnet (bzw. als PWA installiert) ist.
 
 **Zusammenführung:** Beide Datensätze werden vereinigt (union by id) – bestehende lokale Einträge bleiben erhalten, neue Einträge vom anderen Gerät werden übernommen. Bei Personen werden Abwesenheiten vereinigt, Matrix-Häkchen kombiniert (aktiv gewinnt) und der Schichtrhythmus übernommen, falls lokal keiner gesetzt ist.
 
