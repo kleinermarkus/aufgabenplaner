@@ -20,7 +20,7 @@ Im Tab **⚙️ Stammdaten & Export** lassen sich **Gruppen** anlegen (z. B. Tea
 - Muster- und Gruppen-Änderungen werden per **Last-Update-wins** synchronisiert und setzen sich damit zuverlässig auf dem anderen Gerät durch.
 - Bei der **automatischen Zuteilung** werden Aufgaben mit Gruppen nur an Mitglieder dieser Gruppen vergeben.
 - In der **Verfügbarkeits-Liste** werden Nicht-Mitglieder ausgegraut mit dem Grund „Nicht in relevanter Gruppe“.
-- Im Kalender tragen Gruppen-Termine ein kleines **Indigo-Badge mit dem Gruppen-Kürzel** (oben rechts in der Zelle und am Termin-Chip); mehrere Termine pro Tag sind durch die vorangestellte Uhrzeit klar getrennt.
+- Im Kalender tragen Gruppen-Termine ein kleines **Indigo-Badge mit dem Gruppen-Kürzel** am Termin-Chip; mehrere Termine pro Tag sind durch die vorangestellte Uhrzeit klar getrennt.
 - Wird eine Gruppe gelöscht, wird sie automatisch aus allen Terminen und Mustern entfernt.
 
 ## Monatliche Muster

@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.9.3';
+    const APP_VERSION = '1.9.4';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -1363,8 +1363,7 @@
           },
             h('div', { className: 'flex justify-between items-start' },
               h('span', { className: `text-xs font-bold px-1.5 py-0.5 rounded ${holidayName ? 'bg-amber-200 text-amber-900' : 'text-slate-700'}` }, dayNum),
-              holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[36px] sm:max-w-[70px]' }, holidayName) : null,
-              dayGroupInitials ? h('span', { title: `Gruppentermin: ${dayGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-indigo-600 text-white rounded-full min-w-[14px] h-[14px] px-0.5 flex items-center justify-center shrink-0' }, dayGroupInitials) : null
+              holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[36px] sm:max-w-[70px]' }, holidayName) : null
             ),
             h('div', { className: 'hidden sm:block space-y-1 overflow-y-auto max-h-[68px] my-1 min-w-0' },
               dayTasks.map(t => {
