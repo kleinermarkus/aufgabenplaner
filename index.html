@@ -3,24 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Monatsplaner & Aufgabenverteiler (Sachsen)</title>
-  <!-- Tailwind CSS -->
+  <title>Monatsplaner &amp; Aufgabenverteiler (Sachsen)</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- React & ReactDOM -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <!-- Mammoth.js for DOCX -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-  <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script>
     if (window.pdfjsLib) {
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     }
   </script>
-  <!-- PeerJS für WebRTC Data Channel Sync -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <!-- QR-Code Bibliothek -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     @media print {
@@ -36,13 +30,9 @@
   <div id="root"></div>
 
   <script>
-    const { useState, useEffect, useMemo, useRef, createElement: h } = React;
+    const { useState, useEffect, useRef, createElement: h } = React;
+    const SYNC_STORAGE_KEY = 'aufgabenplaner.sync.data';
 
-    const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-
-    // Sächsische Feiertage dynamisch berechnen
-    
-    // ISO Kalenderwoche berechnen
     function getIsoWeek(date) {
       const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
       const dayNum = d.getUTCDay() || 7;
@@ -51,10 +41,6 @@
       return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
     }
 
-    
-    // Lokales Datum im Format YYYY-MM-DD erzeugen (verhindert Zeitzonen-Verschiebungen durch toISOString)
-    
-    // Datum aus YYYY-MM-DD string lokal erzeugen (verhindert Zeitzonen-Verschiebungen)
     function parseLocalDate(dateStr) {
       if (!dateStr) return new Date();
       const parts = dateStr.split('-');
@@ -70,3 +56,174 @@
       const day = String(d.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     }
+
+    function readSavedState() {
+      try {
+        return JSON.parse(localStorage.getItem(SYNC_STORAGE_KEY)) || { value: '', updatedAt: 0 };
+      } catch (_) {
+        return { value: '', updatedAt: 0 };
+      }
+    }
+
+    function App() {
+      const [saved, setSaved] = useState(readSavedState);
+      const [status, setStatus] = useState('Nicht verbunden');
+      const [peerId, setPeerId] = useState('');
+      const [remoteId, setRemoteId] = useState('');
+      const [copyMessage, setCopyMessage] = useState('');
+      const peerRef = useRef(null);
+      const connRef = useRef(null);
+      const qrRef = useRef(null);
+      const savedRef = useRef(saved);
+      const suppressSendRef = useRef(false);
+
+      useEffect(() => { savedRef.current = saved; }, [saved]);
+
+      const persistAndSend = (next) => {
+        savedRef.current = next;
+        setSaved(next);
+        try { localStorage.setItem(SYNC_STORAGE_KEY, JSON.stringify(next)); } catch (error) {
+          setStatus('Speichern fehlgeschlagen: ' + error.message);
+        }
+        if (connRef.current && connRef.current.open && !suppressSendRef.current) {
+          connRef.current.send({ type: 'state', state: next });
+        }
+      };
+
+      const attachConnection = (connection) => {
+        if (connRef.current && connRef.current !== connection) connRef.current.close();
+        connRef.current = connection;
+        setStatus('Verbindung wird aufgebaut …');
+        connection.on('open', () => {
+          setStatus('Verbunden');
+          connection.send({ type: 'state', state: savedRef.current });
+        });
+        connection.on('data', (message) => {
+          if (!message || message.type !== 'state' || !message.state || typeof message.state.value !== 'string') return;
+          const incoming = message.state;
+          if (Number(incoming.updatedAt) > Number(savedRef.current.updatedAt)) {
+            suppressSendRef.current = true;
+            persistAndSend({ value: incoming.value, updatedAt: Number(incoming.updatedAt) || Date.now() });
+            suppressSendRef.current = false;
+          }
+        });
+        connection.on('close', () => {
+          if (connRef.current === connection) connRef.current = null;
+          setStatus('Verbindung getrennt');
+        });
+        connection.on('error', (error) => setStatus('Verbindungsfehler: ' + (error.message || 'Unbekannter Fehler')));
+      };
+
+      const createPeer = () => {
+        if (!window.Peer) {
+          setStatus('PeerJS konnte nicht geladen werden. Bitte Internetverbindung prüfen.');
+          return null;
+        }
+        if (peerRef.current) peerRef.current.destroy();
+        setPeerId('');
+        setStatus('Verbindungscode wird erstellt …');
+        const peer = new Peer();
+        peerRef.current = peer;
+        peer.on('open', (id) => {
+          setPeerId(id);
+          setStatus('Bereit zum Verbinden');
+        });
+        peer.on('connection', attachConnection);
+        peer.on('error', (error) => setStatus('PeerJS-Fehler: ' + (error.message || error.type)));
+        peer.on('disconnected', () => setStatus('Signalisierungsserver getrennt. Bitte erneut versuchen.'));
+        return peer;
+      };
+
+      const startHosting = () => createPeer();
+
+      const connectToPeer = () => {
+        const target = remoteId.trim();
+        if (!target) {
+          setStatus('Bitte zuerst den Verbindungscode eingeben.');
+          return;
+        }
+        const peer = createPeer();
+        if (!peer) return;
+        peer.on('open', () => attachConnection(peer.connect(target, { reliable: true })));
+      };
+
+      const copyCode = async () => {
+        try {
+          await navigator.clipboard.writeText(peerId);
+          setCopyMessage('Verbindungscode kopiert.');
+        } catch (_) {
+          const field = document.getElementById('peer-code');
+          field.select();
+          const copied = document.execCommand('copy');
+          setCopyMessage(copied ? 'Verbindungscode kopiert.' : 'Bitte den Code manuell markieren und kopieren.');
+        }
+        window.setTimeout(() => setCopyMessage(''), 2500);
+      };
+
+      useEffect(() => {
+        if (!qrRef.current) return;
+        qrRef.current.innerHTML = '';
+        if (peerId && window.QRCode) {
+          new QRCode(qrRef.current, { text: peerId, width: 176, height: 176 });
+        }
+      }, [peerId]);
+
+      useEffect(() => {
+        window.aufgabenplanerSync = {
+          getData: () => savedRef.current.value,
+          setData: (value) => persistAndSend({ value: typeof value === 'string' ? value : JSON.stringify(value), updatedAt: Date.now() })
+        };
+        return () => {
+          delete window.aufgabenplanerSync;
+          if (peerRef.current) peerRef.current.destroy();
+        };
+      }, []);
+
+      return h('main', { className: 'mx-auto max-w-3xl p-4 sm:p-8' },
+        h('header', { className: 'mb-6' },
+          h('h1', { className: 'text-2xl font-bold text-slate-900' }, 'Aufgabenplaner synchronisieren'),
+          h('p', { className: 'mt-2 text-slate-600' }, 'Verbinde zwei Geräte direkt über einen WebRTC-Datenkanal. Der Verbindungscode kann kopiert oder als QR-Code gescannt werden.')
+        ),
+        h('section', { className: 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm' },
+          h('div', { className: 'mb-4 flex flex-wrap items-center justify-between gap-3' },
+            h('h2', { className: 'text-lg font-semibold' }, 'Geräte verbinden'),
+            h('span', { className: 'rounded-full bg-slate-100 px-3 py-1 text-sm', role: 'status' }, status)
+          ),
+          h('div', { className: 'grid gap-6 md:grid-cols-2' },
+            h('div', null,
+              h('h3', { className: 'font-medium' }, 'Gerät 1: Verbindungscode erstellen'),
+              h('p', { className: 'mb-3 mt-1 text-sm text-slate-600' }, 'Erstelle einen Code und teile ihn mit dem zweiten Gerät.'),
+              h('button', { type: 'button', onClick: startHosting, className: 'rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700' }, 'Code erstellen'),
+              peerId ? h('div', { className: 'mt-4' },
+                h('label', { htmlFor: 'peer-code', className: 'mb-1 block text-sm font-medium' }, 'Dein Verbindungscode'),
+                h('div', { className: 'flex gap-2' },
+                  h('input', { id: 'peer-code', readOnly: true, value: peerId, className: 'min-w-0 flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm', onFocus: (event) => event.target.select() }),
+                  h('button', { type: 'button', onClick: copyCode, className: 'rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium hover:bg-slate-50' }, 'Kopieren')
+                ),
+                h('p', { className: 'mt-1 min-h-5 text-sm text-green-700', 'aria-live': 'polite' }, copyMessage),
+                h('div', { ref: qrRef, className: 'mt-3 inline-block rounded border border-slate-200 bg-white p-2', 'aria-label': 'QR-Code mit Verbindungscode' })
+              ) : null
+            ),
+            h('div', null,
+              h('h3', { className: 'font-medium' }, 'Gerät 2: Verbindungscode eingeben'),
+              h('p', { className: 'mb-3 mt-1 text-sm text-slate-600' }, 'Füge den Code ein, den Gerät 1 angezeigt hat.'),
+              h('label', { htmlFor: 'remote-code', className: 'mb-1 block text-sm font-medium' }, 'Verbindungscode'),
+              h('input', { id: 'remote-code', value: remoteId, onChange: (event) => setRemoteId(event.target.value), onKeyDown: (event) => { if (event.key === 'Enter') connectToPeer(); }, placeholder: 'Code hier einfügen', className: 'mb-3 w-full rounded-lg border border-slate-300 px-3 py-2' }),
+              h('button', { type: 'button', onClick: connectToPeer, className: 'rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700' }, 'Verbinden')
+            )
+          ),
+          h('p', { className: 'mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-900' }, 'Hinweis: Der Verbindungscode ist eine PeerJS-ID, kein Passwort. Teile ihn nur mit dem gewünschten Gerät. Die Verbindung wird über einen Signalisierungsserver vermittelt; der Datenkanal nutzt WebRTC.')
+        ),
+        h('section', { className: 'mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm' },
+          h('h2', { className: 'text-lg font-semibold' }, 'Synchronisierte Daten'),
+          h('p', { className: 'mb-3 mt-1 text-sm text-slate-600' }, 'Dieser Bereich demonstriert den Datenaustausch. Verbundene Geräte halten den Inhalt synchron; die Daten bleiben zusätzlich lokal im Browser gespeichert.'),
+          h('label', { htmlFor: 'sync-data', className: 'mb-1 block text-sm font-medium' }, 'Daten (z. B. Aufgabenplaner-JSON)'),
+          h('textarea', { id: 'sync-data', value: saved.value, onChange: (event) => persistAndSend({ value: event.target.value, updatedAt: Date.now() }), rows: 10, placeholder: '{\n  "aufgaben": []\n}', className: 'w-full rounded-lg border border-slate-300 p-3 font-mono text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200' })
+        )
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+  </script>
+</body>
+</html>
