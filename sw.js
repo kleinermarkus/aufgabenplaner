@@ -1,7 +1,28 @@
-const CACHE_NAME = 'aufgabenplaner-v1';
+const CACHE_NAME = 'aufgabenplaner-v2';
 
-self.addEventListener('install', () => {
-  self.skipWaiting();
+const PRECACHE = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './version.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './tailwind-3.4.16.js',
+  './react-18.3.1.production.min.js',
+  './react-dom-18.3.1.production.min.js',
+  './mammoth-1.6.0.browser.min.js',
+  './pdf-2.16.105.min.js',
+  './pdf.worker-2.16.105.min.js',
+  './peerjs-1.5.4.min.js',
+  './qrcode-1.0.0.min.js'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (event) => {
@@ -15,14 +36,32 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode !== 'navigate') return;
+  const req = event.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (req.mode === 'navigate' || url.pathname.endsWith('/version.json')) {
+    event.respondWith(
+      fetch(req)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+          return response;
+        })
+        .catch(() => caches.match(req, { ignoreSearch: true }))
+    );
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+      return fetch(req).then((response) => {
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
         return response;
-      })
-      .catch(() => caches.match(event.request))
+      });
+    })
   );
 });

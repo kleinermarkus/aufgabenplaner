@@ -40,6 +40,7 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 
 ### 📱 PWA
 - **Installierbar** als App; **Update-Banner** bei neuer Server-Version; **Versionsnummer** im Kopf
+- **Offline-fähig:** Alle Bibliotheken werden lokal mitgeliefert und vom Service Worker vorgehalten – die App startet und arbeitet auch ohne Internetverbindung (nur die Geräte-Synchronisierung braucht dann Internet)
 
 ### 🛠️ Zentrale Programm-Funktionen (Code-Referenz)
 | Funktion | Aufgabe |
@@ -160,7 +161,7 @@ Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selb
 
 - **Authentifizierungs-Handshake:** Der Schlüssel besteht aus dem sichtbaren Code **und einem geheimen Token** (QR-Code/Text enthalten beides). Vor dem ersten Datenabgleich prüfen beide Geräte das Token – Verbindungsversuche mit ungültigem Schlüssel werden abgewiesen und im Protokoll vermerkt. Ohne gültigen Schlüssel werden keine Daten übertragen.
 - **Schlüssel wie ein Passwort behandeln:** Nur mit dem eigenen zweiten Gerät teilen. Bei Verdacht auf Missbrauch auf beiden Geräten „Kopplung löschen“ und neu koppeln (das erzeugt ein neues Token).
-- **Integrität der Bibliotheken (SRI):** Alle externen Skripte (React, ReactDOM, Mammoth, PDF.js, PeerJS, QRCode) sind auf feste Versionen gepinnt und mit Subresource-Integrity-Hashes abgesichert; Tailwind wird lokal ausgeliefert (`tailwind-3.4.16.js`, ebenfalls per SRI geprüft). Manipulierte CDN-Auslieferungen werden vom Browser blockiert.
+- **Integrität der Bibliotheken (SRI):** Alle Bibliotheken (React, ReactDOM, Tailwind, Mammoth, PDF.js inkl. Worker, PeerJS, QRCode) liegen versioniert im Repository und sind mit Subresource-Integrity-Hashes abgesichert – manipulierte oder veränderte Dateien blockiert der Browser.
 
 **Verlässlichkeit:** Der Empfang ist idempotent – mehrfach übertragene identische Daten ändern nichts und erzeugen keine Protokoll-Einträge. Bricht die Datenverbindung ab, wird sie automatisch (alle paar Sekunden) neu aufgebaut, ohne dass die Kopplung verloren geht. Nach dem Update auf die Handshake-Version müssen einmal gekoppelte Geräte **einmalig neu gekoppelt** werden (die alte Kopplung wird automatisch entfernt). Bei einem **Versionsunterschied** zwischen den Geräten erscheint eine klare Warnung im Sync-Protokoll.
 
@@ -172,14 +173,15 @@ Die App selbst ist eigenständiger Code. Eingebundene Fremdbibliotheken stehen u
 
 | Bibliothek | Version | Lizenz | Bezug |
 |---|---|---|---|
-| React / ReactDOM | 18.3.1 | MIT | CDN (unpkg) |
-| Tailwind CSS | 3.4.16 | MIT | **selbst gehostet** (`tailwind-3.4.16.js`, Lizenztext: `tailwind-3.4.16.LICENSE`) |
-| Mammoth.js | 1.6.0 | BSD-2-Clause | CDN (cdnjs) |
-| PDF.js | 2.16.105 | Apache-2.0 | CDN (cdnjs) |
-| PeerJS | 1.5.4 | MIT | CDN (unpkg) |
-| qrcodejs | 1.0.0 | MIT | CDN (cdnjs) |
+| React | 18.3.1 | MIT | lokal (`react-18.3.1.production.min.js`) |
+| ReactDOM | 18.3.1 | MIT | lokal (`react-dom-18.3.1.production.min.js`) |
+| Tailwind CSS | 3.4.16 | MIT | lokal (`tailwind-3.4.16.js`, Lizenztext: `tailwind-3.4.16.LICENSE`) |
+| Mammoth.js | 1.6.0 | BSD-2-Clause | lokal (`mammoth-1.6.0.browser.min.js`) |
+| PDF.js | 2.16.105 | Apache-2.0 | lokal (`pdf-2.16.105.min.js` + `pdf.worker-2.16.105.min.js`) |
+| PeerJS | 1.5.4 | MIT | lokal (`peerjs-1.5.4.min.js`) |
+| qrcodejs | 1.0.0 | MIT | lokal (`qrcode-1.0.0.min.js`) |
 
-Alle CDN-Skripte sind auf feste Versionen gepinnt und per SRI-Integritäts-Hash abgesichert (siehe Abschnitt Sicherheit).
+Alle Bibliotheksdateien liegen versioniert im Repository und werden per SRI-Integritäts-Hash abgesichert (siehe Abschnitt Sicherheit) – dadurch funktioniert die App auch ohne Internetverbindung und ohne Abhängigkeit von CDN-Anbietern.
 
 ## Datenschutz
 
