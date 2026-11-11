@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.8.6';
+    const APP_VERSION = '1.8.7';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -73,6 +73,12 @@
       let hash = 0;
       for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
       return PERSON_COLORS[hash % PERSON_COLORS.length];
+    };
+    const getInitials = (name) => {
+      if (!name) return '?';
+      const parts = name.trim().split(/\s+/);
+      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     };
 
     // Externe Schicht einer Person an einem Datum (Rotation ab Startdatum, null = keine Einschränkung)
@@ -1235,8 +1241,12 @@
                 const loc = locations.find(l => l.id === t.locationId);
                 const slot = timeSlots.find(s => s.id === t.slotId);
                 const person = people.find(p => p.id === t.assignedPersonId);
-                return h('div', { key: t.id, className: `text-[11px] leading-tight px-1 py-0.5 rounded border truncate font-bold ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300 text-rose-700'}` },
-                  `${person ? person.name : 'Offen'} · ${loc?.name || 'Ort'} ${slot?.time || ''}`
+                return h('div', {
+                  key: t.id,
+                  title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : 'Offen',
+                  className: `text-[11px] leading-tight px-1 py-0.5 rounded border truncate font-bold text-center ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300 text-rose-700'}`
+                },
+                  `${person ? getInitials(person.name) : 'Offen'} · ${slot?.time || ''}`
                 );
               })
             ) : null

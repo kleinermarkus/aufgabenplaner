@@ -6,7 +6,7 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 
 Beim **automatischen Termine generieren** wird geprüft, ob zur gleichen Zeit (gleiches Datum + gleiche Uhrzeit, unabhängig von Zeitslot-ID und Ort) bereits ein Termin existiert – auch in überlappenden Kalenderwochen beim Monatswechsel und innerhalb eines Durchlaufs. So entstehen keine Doppel-Termine.
 
-Im Monats-Kalender genügt ein **Tipp/Antippen auf den Tag**, um ihn auszuwählen – rechts im Aufgaben-Panel liegt dann die Schaltfläche **„+ Aufgabe anlegen“** für diesen Tag (ein extra „+ Aufgabe“-Button in jeder Zelle gibt es nicht mehr). Jede Aufgabe zeigt den zugeteilten Namen als **farbigen Chip** – jede Person hat eine feste Farbe, Zuteilungen sind so auf einen Blick erkennbar (mobil und am Desktop). Unbesetzte Aufgaben erscheinen rot („Offen").
+Im Monats-Kalender genügt ein **Tipp/Antippen auf den Tag**, um ihn auszuwählen – rechts im Aufgaben-Panel liegt dann die Schaltfläche **„+ Aufgabe anlegen“** für diesen Tag (ein extra „+ Aufgabe“-Button in jeder Zelle gibt es nicht mehr). Jede Aufgabe zeigt den zugeteilten Namen als **farbigen Chip** – jede Person hat eine feste Farbe, Zuteilungen sind so auf einen Blick erkennbar (mobil und am Desktop). Auf schmalen mobilen Zellen wird im Chip statt des Namens nur das **Akronym (Anfangsbuchstaben)** angezeigt (z. B. „GM · 15:00“); der volle Name steht im Tooltip bzw. nach dem Antippen des Tags im Aufgaben-Panel. Unbesetzte Aufgaben erscheinen rot („Offen").
 
 Einfach `index.html` in einem Browser öffnen (Internetverbindung nötig, da React/Tailwind per CDN geladen werden). Alle Daten bleiben lokal im Browser (localStorage).
 
