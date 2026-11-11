@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Monatsplaner & Aufgabenverteiler (Sachsen)</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -33,6 +37,8 @@
 
   <script>
     const { useState, useEffect, useMemo, createElement: h } = React;
+
+    const APP_VERSION = '1.1.0';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -203,12 +209,36 @@
       const [editingAbsence, setEditingAbsence] = useState(null);
 
       const [toast, setToast] = useState(null);
+      const [updateAvailable, setUpdateAvailable] = useState(false);
 
       useEffect(() => localStorage.setItem('app_locs', JSON.stringify(locations)), [locations]);
       useEffect(() => localStorage.setItem('app_slots', JSON.stringify(timeSlots)), [timeSlots]);
       useEffect(() => localStorage.setItem('app_pats', JSON.stringify(patterns)), [patterns]);
       useEffect(() => localStorage.setItem('app_people', JSON.stringify(people)), [people]);
       useEffect(() => localStorage.setItem('app_sched', JSON.stringify(schedule)), [schedule]);
+
+      // PWA: Service Worker registrieren und periodisch nach einer neuen Server-Version prüfen
+      useEffect(() => {
+        if (!location.protocol.startsWith('http')) return;
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+        const checkVersion = async () => {
+          try {
+            const res = await fetch(`version.json?ts=${Date.now()}`, { cache: 'no-store' });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.version && data.version !== APP_VERSION) setUpdateAvailable(true);
+          } catch (err) {}
+        };
+        checkVersion();
+        const interval = setInterval(checkVersion, 5 * 60 * 1000);
+        window.addEventListener('focus', checkVersion);
+        return () => {
+          clearInterval(interval);
+          window.removeEventListener('focus', checkVersion);
+        };
+      }, []);
 
       const showToast = (msg, type = 'info') => {
         setToast({ msg, type });
@@ -236,7 +266,7 @@
 
         const matrixKey = `${matchSlot.id}_${locationId}`;
         const isQualified = !!person.matrix?.[matrixKey];
-        if (!isQualified) return { isAvailable: false, reason: 'Nicht qualifiziert' };
+        if (!isQualified) return { isAvailable: false, reason: 'Nicht für diesen Ort/Zeitslot qualifiziert' };
 
         return { isAvailable: true, reason: 'Verfügbar' };
       };
@@ -783,7 +813,8 @@
         // Header
         h('header', { className: 'bg-white border-b border-slate-200 px-6 py-4 shadow-sm flex flex-wrap justify-between items-center gap-4' },
           h('div', null,
-            h('h1', { className: 'text-xl font-bold text-slate-900 flex items-center gap-2' }, '🗓️ Monats- & Wochenplaner (Sachsen)'),
+            h('h1', { className: 'text-xl font-bold text-slate-900 flex items-center gap-2' }, '🗓️ Monats- & Wochenplaner (Sachsen)',
+            h('span', { className: 'text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded no-print' }, `v${APP_VERSION}`)),
             h('p', { className: 'text-xs text-slate-500' }, 'Automatische gerechte Aufgabenverteilung & Feiertagsunterstützung')
           ),
           h('nav', { className: 'flex bg-slate-100 p-1 rounded-lg gap-1 text-sm font-medium no-print' },
@@ -794,6 +825,11 @@
             h('button', { onClick: () => setActiveTab('settings'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'settings' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '⚙️ Stammdaten & Export')
           )
         ),
+
+        updateAvailable ? h('div', { className: 'fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white text-sm font-semibold px-4 py-2 flex flex-wrap justify-center items-center gap-3 shadow-lg no-print' },
+          '🔄 Eine neue Version ist verfügbar – bitte aktualisieren.',
+          h('button', { onClick: () => location.reload(), className: 'px-3 py-1 bg-white text-amber-700 rounded font-bold text-xs hover:bg-amber-50' }, 'Jetzt aktualisieren')
+        ) : null,
 
         toast ? h('div', { className: `fixed bottom-4 right-4 z-50 px-4 py-2.5 rounded-lg shadow-lg text-white font-medium text-sm ${toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}` }, toast.msg) : null,
 
@@ -893,8 +929,18 @@
                               const isRec = p.id === recId;
                               return h('option', { key: p.id, value: p.id, disabled: !details.isAvailable }, `${p.name} ${isRec ? '⭐ [Empfohlen]' : ''} ${!details.isAvailable ? `(${details.reason})` : ''}`);
                             })
-                          )
-                        );
+                          ),
+                        h('div', { className: 'pt-1 mt-1 space-y-0.5 border-t border-slate-100' },
+                          h('span', { className: 'text-[9px] font-bold text-slate-400 uppercase' }, 'Verfügbarkeit'),
+                          [...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(p => {
+                            const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
+                            return h('div', { key: p.id, className: 'flex justify-between items-center gap-2 text-[9px]' },
+                              h('span', { className: details.isAvailable ? 'text-emerald-700 font-semibold' : 'text-slate-400' }, `${details.isAvailable ? '✓' : '✗'} ${p.name}`),
+                              h('span', { className: details.isAvailable ? 'text-emerald-600' : 'text-rose-500 font-medium text-right' }, details.isAvailable ? 'verfügbar' : details.reason)
+                            );
+                          })
+                        )
+                      );
                       })()
                     );
                   })
