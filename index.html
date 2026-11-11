@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.8.4';
+    const APP_VERSION = '1.8.5';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -803,8 +803,16 @@
                 (!pat.weekParity && weekNum % 2 === 0)
               );
               if (pat.frequency === 'weekly' || matchesBiweekly) {
-                // Duplikatsprüfung: Prüfen ob Task mit gleichem Datum, Zeitslot und Ort bereits existiert
-                const exists = schedule.some(t => t.dateStr === dateStr && t.slotId === pat.slotId && t.locationId === pat.locationId);
+                // Duplikatsprüfung: Zur gleichen Zeit (Datum + Uhrzeit) darf nur ein Termin
+                // existieren – unabhängig von Slot-ID und Ort, auch innerhalb eines Durchlaufs
+                // und in überlappenden Kalenderwochen beim Monatswechsel
+                const sameTime = (t) => {
+                  if (t.dateStr !== dateStr) return false;
+                  if (t.slotId === pat.slotId && t.locationId === pat.locationId) return true;
+                  const tSlot = timeSlots.find(s => s.id === t.slotId);
+                  return !!tSlot && !!slot && tSlot.time === slot.time;
+                };
+                const exists = schedule.some(sameTime) || newTasks.some(sameTime);
                 if (!exists) {
                   newTasks.push({
                     id: `task-${dateStr}-${pat.slotId}-${pat.locationId}`,
@@ -823,8 +831,11 @@
         }
 
         if (newTasks.length > 0) {
-          setSchedule(prev => [...prev, ...newTasks]);
-          showToast(`${newTasks.length} neue Termine generiert (vollständige KW berücksichtigt).`, 'success');
+          const seenIds = new Set(schedule.map(t => t.id));
+          const uniqueNew = [];
+          newTasks.forEach(t => { if (!seenIds.has(t.id)) { seenIds.add(t.id); uniqueNew.push(t); } });
+          setSchedule(prev => [...prev, ...uniqueNew]);
+          showToast(`${uniqueNew.length} neue Termine generiert (vollständige KW berücksichtigt).`, 'success');
         } else {
           showToast('Keine neuen Termine generiert (alle passenden Termine existieren bereits).', 'info');
         }
