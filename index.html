@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.6.0';
+    const APP_VERSION = '1.7.0';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -612,57 +612,59 @@
         return { isAvailable: true, reason: 'Verfügbar' };
       };
 
-      const getRecommendedPersonIdForTask = (task) => {
+      // Einsatz-Bilanz aufbauen (optional eine Aufgabe ausschließen, z. B. die bewertete selbst)
+      const buildAssignmentStats = (scheduleList, peopleList, excludeTaskId) => {
         const counts = {};
         const weekdayCounts = {};
         const lastAssignedDate = {};
-        people.forEach(p => {
+        peopleList.forEach(p => {
           counts[p.id] = 0;
           weekdayCounts[p.id] = {};
           for (let i = 0; i < 7; i++) weekdayCounts[p.id][i] = 0;
           lastAssignedDate[p.id] = null;
         });
-        schedule.forEach(t => {
-          if (t.assignedPersonId && counts[t.assignedPersonId] !== undefined) {
-            counts[t.assignedPersonId]++;
-            const taskDate = parseLocalDate(t.dateStr);
-            const wDay = taskDate.getDay();
-            weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
-            if (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId]) {
-              lastAssignedDate[t.assignedPersonId] = t.dateStr;
-            }
+        scheduleList.forEach(t => {
+          if (!t.assignedPersonId || t.id === excludeTaskId || counts[t.assignedPersonId] === undefined) return;
+          counts[t.assignedPersonId]++;
+          const taskDate = parseLocalDate(t.dateStr);
+          const wDay = taskDate.getDay();
+          weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
+          if (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId]) {
+            lastAssignedDate[t.assignedPersonId] = t.dateStr;
           }
         });
+        return { counts, weekdayCounts, lastAssignedDate };
+      };
 
+      // Fair-Sortierung: 1. längste Pause, 2. weniger Gesamteinsätze, 3. Wochentags-Balance, 4. alphabetisch
+      const sortCandidatesByFairness = (candidates, task, stats) => {
+        const taskDate = parseLocalDate(task.dateStr);
+        const taskWDay = taskDate.getDay();
+        return [...candidates].sort((a, b) => {
+          const lastA = stats.lastAssignedDate[a.id] ? parseLocalDate(stats.lastAssignedDate[a.id]) : null;
+          const lastB = stats.lastAssignedDate[b.id] ? parseLocalDate(stats.lastAssignedDate[b.id]) : null;
+          const daysA = lastA ? (taskDate - lastA) / 86400000 : Infinity;
+          const daysB = lastB ? (taskDate - lastB) / 86400000 : Infinity;
+          if (daysA !== daysB) return daysB - daysA;
+
+          const diffCount = stats.counts[a.id] - stats.counts[b.id];
+          if (diffCount !== 0) return diffCount;
+
+          const diffWDay = (stats.weekdayCounts[a.id][taskWDay] || 0) - (stats.weekdayCounts[b.id][taskWDay] || 0);
+          if (diffWDay !== 0) return diffWDay;
+
+          return a.name.localeCompare(b.name, 'de');
+        });
+      };
+
+      const getRecommendedPersonIdForTask = (task) => {
         const candidates = people.filter(p => {
           const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
           return details.isAvailable;
         });
         if (candidates.length === 0) return null;
-
-        const taskDate = parseLocalDate(task.dateStr);
-        const taskWDay = taskDate.getDay();
-
-        candidates.sort((a, b) => {
-          const diffCount = counts[a.id] - counts[b.id];
-          if (diffCount !== 0) return diffCount;
-
-          const lastA = lastAssignedDate[a.id] ? parseLocalDate(lastAssignedDate[a.id]) : null;
-          const lastB = lastAssignedDate[b.id] ? parseLocalDate(lastAssignedDate[b.id]) : null;
-          const daysA = lastA ? (taskDate - lastA) / (1000 * 60 * 60 * 24) : 9999;
-          const daysB = lastB ? (taskDate - lastB) / (1000 * 60 * 60 * 24) : 9999;
-
-          if (Math.abs(daysA - daysB) > 0.5) {
-            return daysB - daysA;
-          }
-
-          const diffWDay = (weekdayCounts[a.id][taskWDay] || 0) - (weekdayCounts[b.id][taskWDay] || 0);
-          if (diffWDay !== 0) return diffWDay;
-
-          return a.name.localeCompare(b.name, 'de');
-        });
-
-        return candidates[0].id;
+        const stats = buildAssignmentStats(schedule, people, task.id);
+        return sortCandidatesByFairness(candidates, task, stats)[0].id;
       };
 
       // 1. Termine generieren (Vollständige Kalenderwochen einbeziehen + Duplikatsprüfung)
@@ -745,31 +747,7 @@
           return;
         }
 
-        // Zähler, Wochentags-Zähler und Datum des letzten Einsatzes initialisieren
-        const counts = {};
-        const weekdayCounts = {};
-        const lastAssignedDate = {};
-
-        people.forEach(p => {
-          counts[p.id] = 0;
-          weekdayCounts[p.id] = {};
-          for (let i = 0; i < 7; i++) weekdayCounts[p.id][i] = 0;
-          lastAssignedDate[p.id] = null;
-        });
-
-        // Bestehende Zuteilungen einlesen
-        updatedSchedule.forEach(t => {
-          if (t.assignedPersonId && counts[t.assignedPersonId] !== undefined) {
-            counts[t.assignedPersonId]++;
-            const taskDate = parseLocalDate(t.dateStr);
-            const wDay = taskDate.getDay();
-            weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
-
-            if (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId]) {
-              lastAssignedDate[t.assignedPersonId] = t.dateStr;
-            }
-          }
-        });
+        const stats = buildAssignmentStats(updatedSchedule, people, null);
 
         let assignedCount = 0;
         updatedSchedule = updatedSchedule.map(task => {
@@ -781,37 +759,11 @@
           });
 
           if (candidates.length > 0) {
-            const taskDate = parseLocalDate(task.dateStr);
-            const taskWDay = taskDate.getDay();
-
-            candidates.sort((a, b) => {
-              // 1. Primär: Gesamtanzahl Einsätze (Wer weniger hat, wird bevorzugt)
-              const diffCount = counts[a.id] - counts[b.id];
-              if (diffCount !== 0) return diffCount;
-
-              // 2. Sekundär: Zeitlicher Abstand / Pause (Wer länger Pause hatte, wird streng bevorzugt)
-              const lastA = lastAssignedDate[a.id] ? parseLocalDate(lastAssignedDate[a.id]) : null;
-              const lastB = lastAssignedDate[b.id] ? parseLocalDate(lastAssignedDate[b.id]) : null;
-
-              const daysA = lastA ? (taskDate - lastA) / (1000 * 60 * 60 * 24) : 9999;
-              const daysB = lastB ? (taskDate - lastB) / (1000 * 60 * 60 * 24) : 9999;
-
-              if (Math.abs(daysA - daysB) > 0.5) {
-                return daysB - daysA;
-              }
-
-              // 3. Tertiär: Wochentags-Balance (Wer an diesem Wochentag bisher seltener dran war)
-              const diffWDay = (weekdayCounts[a.id][taskWDay] || 0) - (weekdayCounts[b.id][taskWDay] || 0);
-              if (diffWDay !== 0) return diffWDay;
-
-              // 4. Quaternär: Alphabetisch / Zufall
-              return a.name.localeCompare(b.name, 'de');
-            });
-
-            const chosen = candidates[0];
-            counts[chosen.id]++;
-            weekdayCounts[chosen.id][taskWDay] = (weekdayCounts[chosen.id][taskWDay] || 0) + 1;
-            lastAssignedDate[chosen.id] = task.dateStr;
+            const chosen = sortCandidatesByFairness(candidates, task, stats)[0];
+            const taskWDay = parseLocalDate(task.dateStr).getDay();
+            stats.counts[chosen.id]++;
+            stats.weekdayCounts[chosen.id][taskWDay] = (stats.weekdayCounts[chosen.id][taskWDay] || 0) + 1;
+            stats.lastAssignedDate[chosen.id] = task.dateStr;
             assignedCount++;
             return { ...task, assignedPersonId: chosen.id };
           }
@@ -819,7 +771,7 @@
         });
 
         setSchedule(updatedSchedule);
-        showToast(`${assignedCount} Aufgaben unter Berücksichtigung von Wochentags-Balance, Pausen und Fairness zugeteilt.`, 'success');
+        showToast(`${assignedCount} Aufgaben zugeteilt – längste Pause zuerst, dann Gesamtbilanz und Wochentags-Balance.`, 'success');
       };
 
       // PDF Drucken / Exportieren

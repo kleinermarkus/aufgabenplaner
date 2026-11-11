@@ -6,6 +6,17 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 
 Einfach `index.html` in einem Browser öffnen (Internetverbindung nötig, da React/Tailwind per CDN geladen werden). Alle Daten bleiben lokal im Browser (localStorage).
 
+## Faire automatische Zuteilung
+
+Die automatische Zuteilung („2. Personen zuteilen") und die Empfehlung im Aufgaben-Panel verwenden dieselbe Fairness-Bewertung. Pro Aufgabe wird unter allen **verfügbaren** Personen gewählt nach:
+
+1. **Längster Pause** – wer am längsten keinen Einsatz hatte, kommt zuerst (noch nie Eingesetzte zuerst),
+2. **weniger Gesamteinsätze**,
+3. **Wochentags-Balance** – wer an diesem Wochentag seltener dran war,
+4. alphabetisch (entscheidet nur bei völliger Gleichheit).
+
+Damit wird niemand übersprungen, wenn andere verfügbar sind, und die Empfehlung entspricht der automatischen Zuteilung. Bereits zugeteilte Aufgaben bleiben beim erneuten Ausführen unverändert; mit **„🧹 Zuteilungen zurücksetzen (Monat)"** und erneutem „Personen zuteilen" wird ein Monat komplett neu und fair verteilt.
+
 ## Schichtarbeit (externes 3-Schicht-System)
 
 Mitarbeiter im externen 3-Schicht-System können pro Person hinterlegt werden: In **Personen & Matrix** unter „Externes Schichtsystem (Rotation)" den Modus „Arbeitet extern im Schichtsystem" wählen.
