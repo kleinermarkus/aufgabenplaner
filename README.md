@@ -72,5 +72,7 @@ Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selb
 
 **Zusammenführung:** Beide Datensätze werden vereinigt (union by id) – neue Einträge vom anderen Gerät werden übernommen. **Termine (inkl. Zuteilungen) werden nach dem Last-Update-wins-Prinzip abgeglichen:** Die jeweils zuletzt gemachte Änderung (neuerer Zeitstempel) setzt sich auf beiden Geräten durch. Wird ein gelöschter Termin danach neu angelegt oder geändert (z. B. durch erneutes Termine generieren), belebt er die Lösch-Markierung wieder. Bei Personen werden Abwesenheiten vereinigt, Matrix-Häkchen kombiniert (aktiv gewinnt) und der Schichtrhythmus übernommen, falls lokal keiner gesetzt ist.
 
-**Wichtig:** Damit Änderungen korrekt abgeglichen werden, sollte auf **beiden Geräten die gleiche App-Version** (mindestens 1.8.0) laufen.
+**Verlässlichkeit:** Der Empfang ist idempotent – mehrfach übertragene identische Daten ändern nichts und erzeugen keine Protokoll-Einträge. Bricht die Datenverbindung ab, wird sie automatisch (alle paar Sekunden) neu aufgebaut, ohne dass die Kopplung verloren geht. Bei einem **Versionsunterschied** zwischen den Geräten erscheint eine klare Warnung im Sync-Protokoll.
+
+**Wichtig:** Damit Änderungen korrekt abgeglichen werden, sollte auf **beiden Geräten die gleiche App-Version** (mindestens 1.8.1) laufen.
 
