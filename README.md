@@ -15,7 +15,7 @@ Die automatische Zuteilung („2. Personen zuteilen") und die Empfehlung im Aufg
 3. **Wochentags-Balance** – wer an diesem Wochentag seltener dran war,
 4. alphabetisch (entscheidet nur bei völliger Gleichheit).
 
-Damit wird niemand übersprungen, wenn andere verfügbar sind, und die Empfehlung entspricht der automatischen Zuteilung. Bereits zugeteilte Aufgaben bleiben beim erneuten Ausführen unverändert; mit **„🧹 Zuteilungen zurücksetzen (Monat)"** und erneutem „Personen zuteilen" wird ein Monat komplett neu und fair verteilt.
+Die Bewertung zählt **nur bereits vergangene oder gleichzeitige Einsätze** – zukünftige, schon zugeteilte Aufgaben (z. B. nächste Monate) fließen nicht ein. So bleibt die Verteilung auch dann fair, wenn weit im Voraus Termine generiert wurden. Damit wird niemand übersprungen, wenn andere verfügbar sind, und die Empfehlung entspricht der automatischen Zuteilung. Bereits zugeteilte Aufgaben bleiben beim erneuten Ausführen unverändert; mit **„🧹 Zuteilungen zurücksetzen (Monat)"** und erneutem „Personen zuteilen" wird ein Monat komplett neu und fair verteilt.
 
 ## Schichtarbeit (externes 3-Schicht-System)
 
@@ -68,7 +68,9 @@ Im Hintergrund wird ein **Protokoll** geführt (persistiert im Browser, max. 200
 
 Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selbst gehen direkt Gerät-zu-Gerät (peer-to-peer) und werden auf keinem Server gespeichert. Hintergrund-Synchronisierung setzt voraus, dass die App auf beiden Geräten geöffnet (bzw. als PWA installiert) ist.
 
-**Löschungen:** Gelöschte Einträge werden als **Lösch-Markierung (Tombstone)** gemerkt und mit synchronisiert – so werden gelöschte Orte, Zeitslots, Muster, Personen, Abwesenheiten und Termine auf dem anderen Gerät ebenfalls entfernt und nicht durch den Abgleich wiederhergestellt.
+**Löschungen:** Gelöschte Einträge werden als **Lösch-Markierung (Tombstone) mit Zeitstempel** gemerkt und mit synchronisiert – so werden gelöschte Orte, Zeitslots, Muster, Personen, Abwesenheiten und Termine auf dem anderen Gerät ebenfalls entfernt und nicht durch den Abgleich wiederhergestellt.
 
-**Zusammenführung:** Beide Datensätze werden vereinigt (union by id) – bestehende lokale Einträge bleiben erhalten, neue Einträge vom anderen Gerät werden übernommen. Bei Personen werden Abwesenheiten vereinigt, Matrix-Häkchen kombiniert (aktiv gewinnt) und der Schichtrhythmus übernommen, falls lokal keiner gesetzt ist.
+**Zusammenführung:** Beide Datensätze werden vereinigt (union by id) – neue Einträge vom anderen Gerät werden übernommen. **Termine (inkl. Zuteilungen) werden nach dem Last-Update-wins-Prinzip abgeglichen:** Die jeweils zuletzt gemachte Änderung (neuerer Zeitstempel) setzt sich auf beiden Geräten durch. Wird ein gelöschter Termin danach neu angelegt oder geändert (z. B. durch erneutes Termine generieren), belebt er die Lösch-Markierung wieder. Bei Personen werden Abwesenheiten vereinigt, Matrix-Häkchen kombiniert (aktiv gewinnt) und der Schichtrhythmus übernommen, falls lokal keiner gesetzt ist.
+
+**Wichtig:** Damit Änderungen korrekt abgeglichen werden, sollte auf **beiden Geräten die gleiche App-Version** (mindestens 1.8.0) laufen.
 

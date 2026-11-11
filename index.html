@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.7.0';
+    const APP_VERSION = '1.8.0';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -230,17 +230,28 @@
       const TOMBSTONE_COLLECTIONS = ['locations', 'timeSlots', 'patterns', 'people', 'schedule', 'absences'];
       const normalizeTombstones = (raw) => {
         const base = {};
-        TOMBSTONE_COLLECTIONS.forEach(c => { base[c] = []; });
+        TOMBSTONE_COLLECTIONS.forEach(c => { base[c] = {}; });
         if (!raw || typeof raw !== 'object') return base;
         TOMBSTONE_COLLECTIONS.forEach(c => {
-          if (Array.isArray(raw[c])) base[c] = [...new Set(raw[c].filter(id => typeof id === 'string' && id))].slice(-500);
+          const entry = raw[c];
+          const map = {};
+          if (Array.isArray(entry)) {
+            entry.forEach(id => { if (typeof id === 'string' && id) map[id] = 0; });
+          } else if (entry && typeof entry === 'object') {
+            Object.entries(entry).forEach(([id, ts]) => { if (id && typeof ts === 'number') map[id] = ts; });
+          }
+          const ids = Object.keys(map);
+          if (ids.length > 500) {
+            ids.sort((a, b) => map[a] - map[b]).slice(0, ids.length - 500).forEach(id => { delete map[id]; });
+          }
+          base[c] = map;
         });
         return base;
       };
       const [tombstones, setTombstones] = useState(() => normalizeTombstones(JSON.parse(localStorage.getItem('app_tombstones'))));
       const markDeleted = (collection, id) => {
         if (!id || !TOMBSTONE_COLLECTIONS.includes(collection)) return;
-        setTombstones(prev => normalizeTombstones({ ...prev, [collection]: [...(prev[collection] || []), id] }));
+        setTombstones(prev => normalizeTombstones({ ...prev, [collection]: { ...(prev[collection] || {}), [id]: Date.now() } }));
       };
 
       useEffect(() => localStorage.setItem('app_locs', JSON.stringify(locations)), [locations]);
@@ -290,6 +301,17 @@
         return [...map.values()];
       };
 
+      // Termine: Last-Update-wins – neuere Änderungen (z. B. Zuteilungen) setzen sich durch
+      const mergeTasks = (local, incoming) => {
+        const map = new Map((local || []).map(item => [item.id, item]));
+        (incoming || []).forEach(item => {
+          if (!item || !item.id) return;
+          const cur = map.get(item.id);
+          if (!cur || (item.updatedAt || 0) > (cur.updatedAt || 0)) map.set(item.id, item);
+        });
+        return [...map.values()];
+      };
+
       const addSyncLog = (direction, text) => {
         setSyncLog(prev => [...prev.slice(-199), { time: new Date().toLocaleTimeString('de-DE'), direction, text }]);
       };
@@ -300,45 +322,53 @@
         const incomingTombstones = normalizeTombstones(data.tombstones);
         const mergedTombstones = normalizeTombstones(tombstones);
         TOMBSTONE_COLLECTIONS.forEach(c => {
-          mergedTombstones[c] = [...new Set([...mergedTombstones[c], ...(incomingTombstones[c] || [])])].slice(-500);
+          Object.entries(incomingTombstones[c] || {}).forEach(([id, ts]) => {
+            mergedTombstones[c][id] = Math.max(mergedTombstones[c][id] || 0, ts);
+          });
         });
-        const isDeleted = (collection, id) => id && mergedTombstones[collection].includes(id);
+        const isDeleted = (collection, id, updatedAt) => {
+          const ts = mergedTombstones[collection][id];
+          if (ts === undefined) return false;
+          return updatedAt ? ts > updatedAt : true;
+        };
+        const revive = (collection, id) => { delete mergedTombstones[collection][id]; };
         setTombstones(mergedTombstones);
         const added = { locations: 0, timeSlots: 0, patterns: 0, people: 0, schedule: 0, deletions: 0 };
         if (Array.isArray(data.locations)) {
-          const filtered = data.locations.filter(i => i && i.id && !isDeleted('locations', i.id));
+          const filtered = data.locations.filter(i => i && i.id && !isDeleted('locations', i.id, i.updatedAt));
           added.locations = filtered.filter(i => !locations.some(l => l.id === i.id)).length;
-          const keptLocal = locations.filter(l => !isDeleted('locations', l.id));
+          const keptLocal = locations.filter(l => !isDeleted('locations', l.id, l.updatedAt));
           added.deletions += locations.length - keptLocal.length;
           setLocations(mergeById(keptLocal, filtered));
         }
         if (Array.isArray(data.timeSlots)) {
-          const filtered = data.timeSlots.filter(i => i && i.id && !isDeleted('timeSlots', i.id));
+          const filtered = data.timeSlots.filter(i => i && i.id && !isDeleted('timeSlots', i.id, i.updatedAt));
           added.timeSlots = filtered.filter(i => !timeSlots.some(l => l.id === i.id)).length;
-          const keptLocal = timeSlots.filter(l => !isDeleted('timeSlots', l.id));
+          const keptLocal = timeSlots.filter(l => !isDeleted('timeSlots', l.id, l.updatedAt));
           added.deletions += timeSlots.length - keptLocal.length;
           setTimeSlots(mergeById(keptLocal, filtered));
         }
         if (Array.isArray(data.patterns)) {
-          const filtered = data.patterns.filter(i => i && i.id && !isDeleted('patterns', i.id));
+          const filtered = data.patterns.filter(i => i && i.id && !isDeleted('patterns', i.id, i.updatedAt));
           added.patterns = filtered.filter(i => !patterns.some(l => l.id === i.id)).length;
-          const keptLocal = patterns.filter(l => !isDeleted('patterns', l.id));
+          const keptLocal = patterns.filter(l => !isDeleted('patterns', l.id, l.updatedAt));
           added.deletions += patterns.length - keptLocal.length;
           setPatterns(mergeById(keptLocal, filtered));
         }
         if (Array.isArray(data.schedule)) {
-          const filtered = data.schedule.filter(i => i && i.id && !isDeleted('schedule', i.id));
+          const filtered = data.schedule.filter(i => i && i.id && !isDeleted('schedule', i.id, i.updatedAt));
+          filtered.forEach(i => { if (i.updatedAt) revive('schedule', i.id); });
           added.schedule = filtered.filter(i => !schedule.some(l => l.id === i.id)).length;
-          const keptLocal = schedule.filter(l => !isDeleted('schedule', l.id));
+          const keptLocal = schedule.filter(l => !isDeleted('schedule', l.id, l.updatedAt));
           added.deletions += schedule.length - keptLocal.length;
-          setSchedule(mergeById(keptLocal, filtered));
+          setSchedule(mergeTasks(keptLocal, filtered));
         }
         if (Array.isArray(data.people)) {
-          const keptLocalPeople = people.filter(p => !isDeleted('people', p.id));
+          const keptLocalPeople = people.filter(p => !isDeleted('people', p.id, p.updatedAt));
           added.deletions += people.length - keptLocalPeople.length;
           const map = new Map(keptLocalPeople.map(p => [p.id, p]));
           data.people.forEach(inc => {
-            if (!inc || !inc.id || isDeleted('people', inc.id)) return;
+            if (!inc || !inc.id || isDeleted('people', inc.id, inc.updatedAt)) return;
             const cur = map.get(inc.id);
             if (!cur) { added.people++; map.set(inc.id, inc); return; }
             const mergedMatrix = { ...(inc.matrix || {}) };
@@ -613,7 +643,7 @@
       };
 
       // Einsatz-Bilanz aufbauen (optional eine Aufgabe ausschließen, z. B. die bewertete selbst)
-      const buildAssignmentStats = (scheduleList, peopleList, excludeTaskId) => {
+      const buildAssignmentStats = (scheduleList, peopleList, excludeTaskId, untilDateStr) => {
         const counts = {};
         const weekdayCounts = {};
         const lastAssignedDate = {};
@@ -625,6 +655,7 @@
         });
         scheduleList.forEach(t => {
           if (!t.assignedPersonId || t.id === excludeTaskId || counts[t.assignedPersonId] === undefined) return;
+          if (untilDateStr && t.dateStr > untilDateStr) return;
           counts[t.assignedPersonId]++;
           const taskDate = parseLocalDate(t.dateStr);
           const wDay = taskDate.getDay();
@@ -663,7 +694,7 @@
           return details.isAvailable;
         });
         if (candidates.length === 0) return null;
-        const stats = buildAssignmentStats(schedule, people, task.id);
+        const stats = buildAssignmentStats(schedule, people, task.id, task.dateStr);
         return sortCandidatesByFairness(candidates, task, stats)[0].id;
       };
 
@@ -712,7 +743,8 @@
                     slotId: pat.slotId,
                     locationId: pat.locationId,
                     assignedPersonId: null,
-                    isManual: false
+                    isManual: false,
+                    updatedAt: Date.now()
                   });
                 }
               }
@@ -747,10 +779,25 @@
           return;
         }
 
-        const stats = buildAssignmentStats(updatedSchedule, people, null);
+        // Fairness-Statistiken starten leer und werden chronologisch aufgebaut:
+        // nur bereits vergangene bzw. gleichzeitige Einsätze zählen, zukünftige nicht
+        const stats = buildAssignmentStats([], people, null, null);
+        let histIdx = 0;
 
         let assignedCount = 0;
         updatedSchedule = updatedSchedule.map(task => {
+          while (histIdx < updatedSchedule.length && updatedSchedule[histIdx].dateStr <= task.dateStr) {
+            const hist = updatedSchedule[histIdx];
+            if (hist.assignedPersonId && stats.counts[hist.assignedPersonId] !== undefined) {
+              stats.counts[hist.assignedPersonId]++;
+              const wDay = parseLocalDate(hist.dateStr).getDay();
+              stats.weekdayCounts[hist.assignedPersonId][wDay] = (stats.weekdayCounts[hist.assignedPersonId][wDay] || 0) + 1;
+              if (!stats.lastAssignedDate[hist.assignedPersonId] || hist.dateStr > stats.lastAssignedDate[hist.assignedPersonId]) {
+                stats.lastAssignedDate[hist.assignedPersonId] = hist.dateStr;
+              }
+            }
+            histIdx++;
+          }
           if (task.assignedPersonId) return task;
 
           const candidates = people.filter(p => {
@@ -765,7 +812,7 @@
             stats.weekdayCounts[chosen.id][taskWDay] = (stats.weekdayCounts[chosen.id][taskWDay] || 0) + 1;
             stats.lastAssignedDate[chosen.id] = task.dateStr;
             assignedCount++;
-            return { ...task, assignedPersonId: chosen.id };
+            return { ...task, assignedPersonId: chosen.id, updatedAt: Date.now() };
           }
           return task;
         });
@@ -830,7 +877,7 @@
           setSchedule(schedule.map(t => {
             const d = parseLocalDate(t.dateStr);
             if (d.getFullYear() === year && d.getMonth() === month) {
-              return { ...t, assignedPersonId: null };
+              return { ...t, assignedPersonId: null, updatedAt: Date.now() };
             }
             return t;
           }));
@@ -1259,7 +1306,7 @@
                           e.preventDefault();
                           const slotId = e.target.elements.slotId.value;
                           const locationId = e.target.elements.locationId.value;
-                          setSchedule(schedule.map(t => t.id === task.id ? { ...t, slotId, locationId } : t));
+                          setSchedule(schedule.map(t => t.id === task.id ? { ...t, slotId, locationId, updatedAt: Date.now() } : t));
                           setEditingTask(null);
                           showToast('Aufgabe aktualisiert!', 'success');
                         },
@@ -1289,7 +1336,7 @@
                           ) : null,
                           h('select', {
                             value: task.assignedPersonId || '',
-                            onChange: (e) => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: e.target.value || null } : t)),
+                            onChange: (e) => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: e.target.value || null, updatedAt: Date.now() } : t)),
                             className: 'w-full text-xs p-1 border rounded bg-white font-semibold'
                           },
                             h('option', { value: '' }, '-- Unbesetzt --'),
@@ -1330,7 +1377,8 @@
                         slotId,
                         locationId,
                         assignedPersonId: null,
-                        isManual: true
+                        isManual: true,
+                        updatedAt: Date.now()
                       }]);
                       showToast('Manuelle Aufgabe angelegt', 'success');
                     }
