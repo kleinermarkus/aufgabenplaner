@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.11';
+    const APP_VERSION = '1.10.12';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -107,6 +107,11 @@
         map[p.id] = PERSON_COLORS[idx];
       });
       return map;
+    };
+    const taskChipClass = (personColor, groupCount) => {
+      if (groupCount > 1) return 'bg-blue-700 text-white border-blue-800';
+      if (groupCount === 1) return 'bg-blue-100 text-blue-900 border-blue-300';
+      return personColor || 'bg-red-50 border-red-300 text-red-700';
     };
     const getInitials = (name) => {
       if (!name) return '?';
@@ -1673,8 +1678,9 @@
                 const slot = timeSlots.find(s => s.id === t.slotId);
                 const person = people.find(p => p.id === t.assignedPersonId);
                 const taskGroupNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
-                return h('div', { key: t.id, className: `p-1 rounded border flex items-center gap-1 min-w-0 ${person ? getPersonColorById(person.id) : 'bg-red-50 border-red-300 text-red-700'}` },
-                  taskGroupNames.length > 0 ? taskGroupNames.map((gn, gi) => h('span', { key: gi, title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-indigo-600 text-white rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, groupLetter(gn))) : null,
+                const chipCls = taskChipClass(person ? getPersonColorById(person.id) : null, taskGroupNames.length);
+                return h('div', { key: t.id, className: `p-1 rounded border flex items-center gap-1 min-w-0 ${chipCls}` },
+                  taskGroupNames.length > 0 ? taskGroupNames.map((gn, gi) => h('span', { key: gi, title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-white text-blue-800 rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, groupLetter(gn))) : null,
                   h('span', { className: 'text-[9px] font-bold opacity-90 shrink-0' }, slot?.time || ''),
                   h('div', { className: 'min-w-0 flex-1 leading-tight' },
                     h('span', { className: 'text-[11px] font-bold truncate block' }, person ? person.name : (taskGroupNames.length > 1 ? 'Gruppen' : (taskGroupNames.length === 1 ? taskGroupNames[0] : 'Offen'))),
@@ -1690,14 +1696,15 @@
                 const person = people.find(p => p.id === t.assignedPersonId);
                 const taskGroupNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
                 const taskGroupInitials = taskGroupNames.map(n => getInitials(n)).join('');
+                const chipCls = taskChipClass(person ? getPersonColorById(person.id) : null, taskGroupNames.length);
                 return h('div', {
                   key: t.id,
                   title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : (taskGroupNames.length > 0 ? `Gruppentermin: ${taskGroupNames.join(', ')}` : 'Offen'),
-                  className: `px-0.5 py-0.5 rounded border text-center leading-none ${person ? getPersonColorById(person.id) : 'bg-red-50 border-red-300 text-red-700'}`
+                  className: `px-0.5 py-0.5 rounded border text-center leading-none ${chipCls}`
                 },
                   h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : (taskGroupNames.length > 1 ? 'Gruppen' : (taskGroupNames.length === 1 ? taskGroupInitials : 'Offen'))),
                   slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null,
-                  taskGroupNames.length > 0 ? h('div', { className: 'text-[7px] font-bold text-indigo-700 mt-0.5' }, taskGroupNames.map(n => groupLetter(n)).join('')) : null
+                  taskGroupNames.length > 0 ? h('div', { className: 'text-[7px] font-bold opacity-80 mt-0.5' }, taskGroupNames.map(n => groupLetter(n)).join('')) : null
                 );
               })
             ) : null
