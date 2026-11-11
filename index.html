@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.1';
+    const APP_VERSION = '1.10.2';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -344,6 +344,59 @@
     };
     const INITIAL_SCHEDULE = buildDemoSchedule();
 
+    // Erkennung und Entfernung der Demo-Daten: Demo-Einträge zählen nur, wenn ID und Name
+    // unverändert den Original-Demo-Daten entsprechen – vom Nutzer bearbeitete Einträge bleiben erhalten.
+    const DEMO_ORIGINALS = {
+      people: { 'p-1': 'Anna Beispiel', 'p-2': 'Ben Beispiel', 'p-3': 'Clara Beispiel', 'p-4': 'David Beispiel', 'p-5': 'Emma Beispiel', 'p-6': 'Felix Beispiel' },
+      locations: { 'loc-1': 'Hauptgebäude', 'loc-2': 'Saal B', 'loc-3': 'Werkstatt', 'loc-4': 'Außenstelle' },
+      groups: { 'grp-demo-1': 'Gruppe Nord', 'grp-demo-2': 'Gruppe Süd' },
+      timeSlots: { 'slot-1': [1, '08:00'], 'slot-2': [3, '14:00'], 'slot-3': [5, '18:00'], 'slot-4': [0, '09:30'], 'slot-5': [6, '10:00'] },
+      patterns: { 'pat-1': ['slot-1', 'loc-1', 'weekly'], 'pat-2': ['slot-2', 'loc-2', 'biweekly'], 'pat-3': ['slot-3', 'loc-2', 'monthly'], 'pat-4': ['slot-4', 'loc-1', 'monthly'], 'pat-5': ['slot-5', 'loc-3', 'weekly'] }
+    };
+    const isDemoPerson = (p) => !!p && DEMO_ORIGINALS.people[p.id] === p.name;
+    const isDemoLocation = (l) => !!l && DEMO_ORIGINALS.locations[l.id] === l.name;
+    const isDemoSlot = (s) => !!s && Array.isArray(DEMO_ORIGINALS.timeSlots[s.id]) && DEMO_ORIGINALS.timeSlots[s.id][0] === s.dayOfWeek && DEMO_ORIGINALS.timeSlots[s.id][1] === s.time;
+    const isDemoGroup = (g) => !!g && DEMO_ORIGINALS.groups[g.id] === g.name;
+    const isDemoPattern = (p) => !!p && Array.isArray(DEMO_ORIGINALS.patterns[p.id]) && DEMO_ORIGINALS.patterns[p.id][0] === p.slotId && DEMO_ORIGINALS.patterns[p.id][1] === p.locationId && DEMO_ORIGINALS.patterns[p.id][2] === p.frequency;
+    const isDemoTask = (t) => !!t && t.updatedAt === DEMO_TS && typeof t.id === 'string' && (t.id.indexOf('task-') === 0 || t.id === 'manual-demo-1');
+
+    // Entfernt alle Demo-Einträge aus einem Sync-Datenpaket (beim Senden und beim Empfangen)
+    const stripDemoData = (data) => {
+      if (!data || typeof data !== 'object') return { cleaned: data, removed: 0 };
+      let removed = 0;
+      const cut = (arr, fn) => {
+        if (!Array.isArray(arr)) return arr;
+        const kept = arr.filter(x => !fn(x));
+        removed += arr.length - kept.length;
+        return kept;
+      };
+      const cleaned = {
+        locations: cut(data.locations, isDemoLocation),
+        timeSlots: cut(data.timeSlots, isDemoSlot),
+        patterns: cut(data.patterns, isDemoPattern),
+        groups: cut(data.groups, isDemoGroup),
+        schedule: cut(data.schedule, isDemoTask),
+        people: (() => {
+          if (!Array.isArray(data.people)) return data.people;
+          const kept = [];
+          data.people.forEach(p => {
+            if (!p) return;
+            if (isDemoPerson(p)) { removed++; return; }
+            if (Array.isArray(p.absences) && p.absences.some(a => a && a.id === 'abs-demo-1')) {
+              removed++;
+              kept.push({ ...p, absences: p.absences.filter(a => !a || a.id !== 'abs-demo-1') });
+              return;
+            }
+            kept.push(p);
+          });
+          return kept;
+        })(),
+        tombstones: data.tombstones,
+        appVersion: data.appVersion
+      };
+      return { cleaned, removed };
+    };
+
     function App() {
       const [currentDate, setCurrentDate] = useState(new Date());
       const [activeTab, setActiveTab] = useState('calendar');
@@ -466,7 +519,7 @@
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
       const SYNC_PREFIX = 'aufgabenplaner-';
 
-      const collectSyncData = () => ({ appVersion: APP_VERSION, locations, timeSlots, patterns, groups, people, schedule, tombstones });
+      const collectSyncData = () => stripDemoData({ appVersion: APP_VERSION, locations, timeSlots, patterns, groups, people, schedule, tombstones }).cleaned;
 
       const mergeById = (local, incoming) => {
         const map = new Map((local || []).map(item => [item.id, item]));
@@ -501,12 +554,55 @@
       const applySyncData = (data) => {
         if (!data || typeof data !== 'object') return;
         suppressSendRef.current = true;
+        const { cleaned: incoming, removed: incomingDemoRemoved } = stripDemoData(data);
+        if (incomingDemoRemoved > 0) addSyncLog('info', `🧹 Demo-Daten des anderen Geräts ignoriert (${incomingDemoRemoved})`);
+        const hasRealIncoming = ['locations', 'timeSlots', 'patterns', 'groups', 'schedule', 'people'].some(k => Array.isArray(incoming[k]) && incoming[k].length > 0);
+        const demoWipeIds = {};
+        let demoWipeCount = 0;
+        let baseLocations = locations;
+        let baseTimeSlots = timeSlots;
+        let basePatterns = patterns;
+        let baseGroups = groups;
+        let baseSchedule = schedule;
+        let basePeople = people;
+        if (hasRealIncoming) {
+          const stripLocalColl = (arr, fn, key) => {
+            const kept = (arr || []).filter(x => !fn(x));
+            const removedNow = (arr || []).length - kept.length;
+            if (removedNow > 0) {
+              demoWipeIds[key] = (arr || []).filter(x => fn(x)).map(x => x.id);
+              demoWipeCount += removedNow;
+            }
+            return kept;
+          };
+          baseLocations = stripLocalColl(locations, isDemoLocation, 'locations');
+          baseTimeSlots = stripLocalColl(timeSlots, isDemoSlot, 'timeSlots');
+          basePatterns = stripLocalColl(patterns, isDemoPattern, 'patterns');
+          baseGroups = stripLocalColl(groups, isDemoGroup, 'groups');
+          baseSchedule = stripLocalColl(schedule, isDemoTask, 'schedule');
+          basePeople = stripLocalColl(people, isDemoPerson, 'people').map(p => {
+            const absences = (p.absences || []).filter(a => a && a.id !== 'abs-demo-1');
+            if (absences.length !== (p.absences || []).length) {
+              demoWipeIds.absences = [...(demoWipeIds.absences || []), ...(p.absences || []).filter(a => !a || a.id === 'abs-demo-1').map(a => a.id)];
+              demoWipeCount += (p.absences || []).length - absences.length;
+              return { ...p, absences };
+            }
+            return p;
+          });
+        }
         if (data.appVersion && data.appVersion !== APP_VERSION && versionWarnRef.current !== data.appVersion) {
           versionWarnRef.current = data.appVersion;
           addSyncLog('info', `⚠️ Versionsunterschied: anderes Gerät v${data.appVersion}, dieses Gerät v${APP_VERSION} – bitte auf beiden Geräten aktualisieren!`);
         }
         const incomingTombstones = normalizeTombstones(data.tombstones);
         const mergedTombstones = normalizeTombstones(tombstones);
+        if (demoWipeCount > 0) {
+          const wipeTs = Date.now();
+          Object.entries(demoWipeIds).forEach(([coll, ids]) => {
+            if (!mergedTombstones[coll]) mergedTombstones[coll] = {};
+            ids.forEach(id => { mergedTombstones[coll][id] = wipeTs; });
+          });
+        }
         TOMBSTONE_COLLECTIONS.forEach(c => {
           Object.entries(incomingTombstones[c] || {}).forEach(([id, ts]) => {
             mergedTombstones[c][id] = Math.max(mergedTombstones[c][id] || 0, ts);
@@ -522,56 +618,56 @@
         const added = { locations: 0, timeSlots: 0, patterns: 0, groups: 0, people: 0, schedule: 0, deletions: 0 };
         let changed = false;
 
-        if (Array.isArray(data.locations)) {
-          const filtered = data.locations.filter(i => i && i.id && !isDeleted('locations', i.id, i.updatedAt));
+        if (Array.isArray(incoming.locations)) {
+          const filtered = incoming.locations.filter(i => i && i.id && !isDeleted('locations', i.id, i.updatedAt));
           filtered.forEach(i => { if (i.updatedAt) revive('locations', i.id); });
-          const keptLocal = locations.filter(l => !isDeleted('locations', l.id, l.updatedAt));
-          added.deletions += locations.length - keptLocal.length;
-          added.locations = filtered.filter(i => !locations.some(l => l.id === i.id)).length;
+          const keptLocal = baseLocations.filter(l => !isDeleted('locations', l.id, l.updatedAt));
+          added.deletions += baseLocations.length - keptLocal.length;
+          added.locations = filtered.filter(i => !baseLocations.some(l => l.id === i.id)).length;
           const next = mergeById(keptLocal, filtered);
-          if (stableStringify(next) !== stableStringify(locations)) { changed = true; setLocations(next); }
+          if (stableStringify(next) !== stableStringify(baseLocations)) { changed = true; setLocations(next); }
         }
-        if (Array.isArray(data.timeSlots)) {
-          const filtered = data.timeSlots.filter(i => i && i.id && !isDeleted('timeSlots', i.id, i.updatedAt));
+        if (Array.isArray(incoming.timeSlots)) {
+          const filtered = incoming.timeSlots.filter(i => i && i.id && !isDeleted('timeSlots', i.id, i.updatedAt));
           filtered.forEach(i => { if (i.updatedAt) revive('timeSlots', i.id); });
-          const keptLocal = timeSlots.filter(l => !isDeleted('timeSlots', l.id, l.updatedAt));
-          added.deletions += timeSlots.length - keptLocal.length;
-          added.timeSlots = filtered.filter(i => !timeSlots.some(l => l.id === i.id)).length;
+          const keptLocal = baseTimeSlots.filter(l => !isDeleted('timeSlots', l.id, l.updatedAt));
+          added.deletions += baseTimeSlots.length - keptLocal.length;
+          added.timeSlots = filtered.filter(i => !baseTimeSlots.some(l => l.id === i.id)).length;
           const next = mergeById(keptLocal, filtered);
-          if (stableStringify(next) !== stableStringify(timeSlots)) { changed = true; setTimeSlots(next); }
+          if (stableStringify(next) !== stableStringify(baseTimeSlots)) { changed = true; setTimeSlots(next); }
         }
-        if (Array.isArray(data.patterns)) {
-          const filtered = data.patterns.filter(i => i && i.id && !isDeleted('patterns', i.id, i.updatedAt));
+        if (Array.isArray(incoming.patterns)) {
+          const filtered = incoming.patterns.filter(i => i && i.id && !isDeleted('patterns', i.id, i.updatedAt));
           filtered.forEach(i => { if (i.updatedAt) revive('patterns', i.id); });
-          const keptLocal = patterns.filter(l => !isDeleted('patterns', l.id, l.updatedAt));
-          added.deletions += patterns.length - keptLocal.length;
-          added.patterns = filtered.filter(i => !patterns.some(l => l.id === i.id)).length;
+          const keptLocal = basePatterns.filter(l => !isDeleted('patterns', l.id, l.updatedAt));
+          added.deletions += basePatterns.length - keptLocal.length;
+          added.patterns = filtered.filter(i => !basePatterns.some(l => l.id === i.id)).length;
           const next = mergeTasks(keptLocal, filtered);
-          if (stableStringify(next) !== stableStringify(patterns)) { changed = true; setPatterns(next); }
+          if (stableStringify(next) !== stableStringify(basePatterns)) { changed = true; setPatterns(next); }
         }
-        if (Array.isArray(data.groups)) {
-          const filtered = data.groups.filter(i => i && i.id && !isDeleted('groups', i.id, i.updatedAt));
+        if (Array.isArray(incoming.groups)) {
+          const filtered = incoming.groups.filter(i => i && i.id && !isDeleted('groups', i.id, i.updatedAt));
           filtered.forEach(i => { if (i.updatedAt) revive('groups', i.id); });
-          const keptLocal = groups.filter(l => !isDeleted('groups', l.id, l.updatedAt));
-          added.deletions += groups.length - keptLocal.length;
-          added.groups = filtered.filter(i => !groups.some(l => l.id === i.id)).length;
+          const keptLocal = baseGroups.filter(l => !isDeleted('groups', l.id, l.updatedAt));
+          added.deletions += baseGroups.length - keptLocal.length;
+          added.groups = filtered.filter(i => !baseGroups.some(l => l.id === i.id)).length;
           const next = mergeTasks(keptLocal, filtered);
-          if (stableStringify(next) !== stableStringify(groups)) { changed = true; setGroups(next); }
+          if (stableStringify(next) !== stableStringify(baseGroups)) { changed = true; setGroups(next); }
         }
-        if (Array.isArray(data.schedule)) {
-          const filtered = data.schedule.filter(i => i && i.id && !isDeleted('schedule', i.id, i.updatedAt));
+        if (Array.isArray(incoming.schedule)) {
+          const filtered = incoming.schedule.filter(i => i && i.id && !isDeleted('schedule', i.id, i.updatedAt));
           filtered.forEach(i => { if (i.updatedAt) revive('schedule', i.id); });
-          const keptLocal = schedule.filter(l => !isDeleted('schedule', l.id, l.updatedAt));
-          added.deletions += schedule.length - keptLocal.length;
-          added.schedule = filtered.filter(i => !schedule.some(l => l.id === i.id)).length;
+          const keptLocal = baseSchedule.filter(l => !isDeleted('schedule', l.id, l.updatedAt));
+          added.deletions += baseSchedule.length - keptLocal.length;
+          added.schedule = filtered.filter(i => !baseSchedule.some(l => l.id === i.id)).length;
           const next = mergeTasks(keptLocal, filtered);
-          if (stableStringify(next) !== stableStringify(schedule)) { changed = true; setSchedule(next); }
+          if (stableStringify(next) !== stableStringify(baseSchedule)) { changed = true; setSchedule(next); }
         }
-        if (Array.isArray(data.people)) {
-          const keptLocalPeople = people.filter(p => !isDeleted('people', p.id, p.updatedAt));
-          added.deletions += people.length - keptLocalPeople.length;
+        if (Array.isArray(incoming.people)) {
+          const keptLocalPeople = basePeople.filter(p => !isDeleted('people', p.id, p.updatedAt));
+          added.deletions += basePeople.length - keptLocalPeople.length;
           const map = new Map(keptLocalPeople.map(p => [p.id, p]));
-          data.people.forEach(inc => {
+          incoming.people.forEach(inc => {
             if (!inc || !inc.id || isDeleted('people', inc.id, inc.updatedAt)) return;
             if (inc.updatedAt) revive('people', inc.id);
             const cur = map.get(inc.id);
@@ -589,7 +685,7 @@
             });
           });
           const nextPeople = [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'de'));
-          if (stableStringify(nextPeople) !== stableStringify(people)) { changed = true; setPeople(nextPeople); }
+          if (stableStringify(nextPeople) !== stableStringify(basePeople)) { changed = true; setPeople(nextPeople); }
         }
         if (stableStringify(mergedTombstones) !== stableStringify(tombstones)) {
           changed = true;
@@ -598,6 +694,9 @@
         if (changed) {
           const logText = `Übernommen: ${added.locations} Orte, ${added.timeSlots} Zeitslots, ${added.patterns} Muster, ${added.groups} Gruppen, ${added.people} Personen, ${added.schedule} Termine` + (added.deletions > 0 ? `, ${added.deletions} Löschungen` : '');
           addSyncLog('empfangen', logText);
+        }
+        if (demoWipeCount > 0) {
+          addSyncLog('info', `🧹 Demo-Daten automatisch entfernt (${demoWipeCount}), da das andere Gerät echte Daten gesendet hat`);
         }
         setTimeout(() => { suppressSendRef.current = false; }, 800);
       };;
