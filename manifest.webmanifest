@@ -1,7 +1,7 @@
 {
-  "name": "Monatsplaner & Aufgabenverteiler (Sachsen)",
+  "name": "Monatsplaner & Aufgabenverteiler",
   "short_name": "Aufgabenplaner",
-  "description": "Gerechte Aufgabenverteilung mit Feiertagsunterstützung (Sachsen)",
+  "description": "Gerechte Aufgabenverteilung mit Feiertagsunterstützung",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

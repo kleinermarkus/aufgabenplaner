@@ -166,3 +166,24 @@ Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selb
 
 **Wichtig:** Damit Änderungen korrekt abgeglichen werden, sollte auf **beiden Geräten die gleiche App-Version** (mindestens 1.8.1) laufen.
 
+## Lizenzen
+
+Die App selbst ist eigenständiger Code. Eingebundene Fremdbibliotheken stehen unter permissiven Lizenzen (kommerzielle und private Nutzung erlaubt):
+
+| Bibliothek | Version | Lizenz | Bezug |
+|---|---|---|---|
+| React / ReactDOM | 18.3.1 | MIT | CDN (unpkg) |
+| Tailwind CSS | 3.4.16 | MIT | **selbst gehostet** (`tailwind-3.4.16.js`, Lizenztext: `tailwind-3.4.16.LICENSE`) |
+| Mammoth.js | 1.6.0 | BSD-2-Clause | CDN (cdnjs) |
+| PDF.js | 2.16.105 | Apache-2.0 | CDN (cdnjs) |
+| PeerJS | 1.5.4 | MIT | CDN (unpkg) |
+| qrcodejs | 1.0.0 | MIT | CDN (cdnjs) |
+
+Alle CDN-Skripte sind auf feste Versionen gepinnt und per SRI-Integritäts-Hash abgesichert (siehe Abschnitt Sicherheit).
+
+## Datenschutz
+
+- **Keine zentrale Datenspeicherung:** Personen, Termine, Abwesenheiten und Einstellungen bleiben ausschließlich im lokalen Browser-Speicher (localStorage) des jeweiligen Geräts. Der Webserver (z. B. GitHub Pages) liefert nur statische Dateien aus – es gibt kein Backend, keine Datenbank und keine Konten.
+- **Keine Analyse oder Weitergabe:** Es gibt kein Tracking, keine Analytics, keine Cookies und keine Telemetrie. Der einzige Abruf von Server-Daten ist die Versionsprüfung (`version.json`).
+- **Geräte-Sync Ende-zu-Ende:** Die Synchronisierung läuft direkt zwischen den gekoppelten Geräten (WebRTC Data Channels, DTLS-verschlüsselt). Es fließen dabei nur verschlüsselte Datenströme – Inhalte sind für die Vermittlungsdienste (PeerJS-Signalisierung, STUN/TURN-Relays) nicht lesbar; übertragen wird die App-Datenbank, keine weiteren personenbezogenen Daten.
+- **Hinweis für Teams:** Wer die App für eine Gruppe betreibt, sollte die Beteiligten informieren, dass die Einsatzdaten (Namen, Abwesenheiten) auf den beteiligten Geräten gespeichert und über die Geräte-Kopplung ausgetauscht werden.
