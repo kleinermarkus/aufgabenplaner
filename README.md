@@ -4,6 +4,8 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 
 ## Nutzung
 
+Im Monats-Kalender zeigt jede Aufgabe den zugeteilten Namen als **farbigen Chip** – jede Person hat eine feste Farbe, Zuteilungen sind so auf einen Blick erkennbar (mobil und am Desktop). Unbesetzte Aufgaben erscheinen rot („Offen").
+
 Einfach `index.html` in einem Browser öffnen (Internetverbindung nötig, da React/Tailwind per CDN geladen werden). Alle Daten bleiben lokal im Browser (localStorage).
 
 ## Faire automatische Zuteilung
