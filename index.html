@@ -3,21 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Monatsplaner & Aufgabenverteiler (Sachsen)</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>Monatsplaner & Aufgabenverteiler</title>
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="tailwind-3.4.16.js" integrity="sha384-mS5Uq7sE90lgbBDN8xgf34ibEgbZo4gB3tfLY40ZRle+M188BQw8onzNHg6GUZaA"></script>
   <!-- React & ReactDOM -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1"></script>
   <!-- Mammoth.js for DOCX -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" crossorigin="anonymous" integrity="sha384-nFoSjZIoH3CCp8W639jJyQkuPHinJ2NHe7on1xvlUA7SuGfJAfvMldrsoAVm6ECz"></script>
   <!-- PDF.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js" crossorigin="anonymous" integrity="sha384-uLiAv4VcjM5H2Jsqzl8EajEaxPugj1CIzQaCjQ8c5//vC+elhxO5pZfXGxoLQi1W"></script>
   <script>
     if (window.pdfjsLib) {
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     }
   </script>
+  <!-- PeerJS (WebRTC Data Channels) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR"></script>
+  <!-- QRCode -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU"></script>
   <style>
     @media print {
       body { background: white !important; color: black !important; font-size: 11pt; }
@@ -32,9 +40,71 @@
   <div id="root"></div>
 
   <script>
-    const { useState, useEffect, useMemo, createElement: h } = React;
+    const { useState, useEffect, useMemo, useRef, createElement: h } = React;
+
+    const APP_VERSION = '1.9.9';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+
+    // Externes 3-Schicht-System: Frühschicht (06-14), Spätschicht (14-22), Nachtschicht (22-06)
+    // Nachtschicht blockiert zusätzlich den Folgetag bis 14 Uhr (Frühfenster).
+    const SHIFT_DEFS = {
+      frueh: { label: 'Frühschicht', short: 'F', color: 'bg-amber-100 text-amber-800 border-amber-300' },
+      spaet: { label: 'Spätschicht', short: 'S', color: 'bg-sky-100 text-sky-800 border-sky-300' },
+      nacht: { label: 'Nachtschicht', short: 'N', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' },
+      frei: { label: 'Frei', short: '–', color: 'bg-slate-100 text-slate-500 border-slate-300' }
+    };
+    const SHIFT_CYCLE_ORDER = ['frei', 'frueh', 'spaet', 'nacht'];
+    const DEFAULT_SHIFT_CYCLE = ['frueh', 'frueh', 'spaet', 'spaet', 'nacht', 'nacht', 'frei', 'frei'];
+
+    // Feste Farbe pro Person, damit Zuteilungen im Kalender sofort erkennbar sind
+    const PERSON_COLORS = [
+      'bg-indigo-100 text-indigo-900 border-indigo-300',
+      'bg-emerald-100 text-emerald-900 border-emerald-300',
+      'bg-amber-100 text-amber-900 border-amber-300',
+      'bg-sky-100 text-sky-900 border-sky-300',
+      'bg-rose-100 text-rose-900 border-rose-300',
+      'bg-violet-100 text-violet-900 border-violet-300',
+      'bg-teal-100 text-teal-900 border-teal-300',
+      'bg-orange-100 text-orange-900 border-orange-300'
+    ];
+    const getPersonColor = (id) => {
+      if (!id) return 'bg-slate-100 text-slate-700 border-slate-300';
+      let hash = 0;
+      for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+      return PERSON_COLORS[hash % PERSON_COLORS.length];
+    };
+    const getInitials = (name) => {
+      if (!name) return '?';
+      const parts = name.trim().split(/\s+/);
+      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    };
+
+    // Externe Schicht einer Person an einem Datum (Rotation ab Startdatum, null = keine Einschränkung)
+    function getExternalShiftForDate(person, dateStr) {
+      const rot = person?.shiftRotation;
+      if (!rot?.enabled || !rot.startDate || !Array.isArray(rot.cycle) || rot.cycle.length === 0) return null;
+      const diff = Math.floor((parseLocalDate(dateStr) - parseLocalDate(rot.startDate)) / 86400000);
+      if (diff < 0) return null;
+      const shift = rot.cycle[diff % rot.cycle.length];
+      return shift && shift !== 'frei' ? shift : null;
+    }
+
+    // Liefert Label der blockierenden Schicht oder null, wenn die Person den Zeitslot wahrnehmen kann
+    function getExternalShiftBlock(person, dateStr, slotTime) {
+      const parts = String(slotTime || '').split(':');
+      const hour = parseInt(parts[0], 10) + parseInt(parts[1] || '0', 10) / 60;
+      if (isNaN(hour)) return null;
+      const today = getExternalShiftForDate(person, dateStr);
+      const yesterdayStr = toLocalDateStr(new Date(parseLocalDate(dateStr).getTime() - 86400000));
+      const yesterday = getExternalShiftForDate(person, yesterdayStr);
+      if (today === 'frueh' && hour >= 6 && hour < 14) return 'Frühschicht';
+      if (today === 'spaet' && hour >= 14 && hour < 22) return 'Spätschicht';
+      if (today === 'nacht' && hour >= 22) return 'Nachtschicht';
+      if (yesterday === 'nacht' && hour < 14) return 'Nachtschicht (Folgetag)';
+      return null;
+    }
 
     // Sächsische Feiertage dynamisch berechnen
     
@@ -67,7 +137,27 @@
       return `${year}-${month}-${day}`;
     }
 
-    function getGermanHolidaysSaxony(year) {
+    const GERMAN_STATES = [
+      { code: 'BW', name: 'Baden-Württemberg' },
+      { code: 'BY', name: 'Bayern' },
+      { code: 'BE', name: 'Berlin' },
+      { code: 'BB', name: 'Brandenburg' },
+      { code: 'HB', name: 'Bremen' },
+      { code: 'HH', name: 'Hamburg' },
+      { code: 'HE', name: 'Hessen' },
+      { code: 'MV', name: 'Mecklenburg-Vorpommern' },
+      { code: 'NI', name: 'Niedersachsen' },
+      { code: 'NW', name: 'Nordrhein-Westfalen' },
+      { code: 'RP', name: 'Rheinland-Pfalz' },
+      { code: 'SL', name: 'Saarland' },
+      { code: 'SN', name: 'Sachsen' },
+      { code: 'ST', name: 'Sachsen-Anhalt' },
+      { code: 'SH', name: 'Schleswig-Holstein' },
+      { code: 'TH', name: 'Thüringen' }
+    ];
+
+    function getGermanHolidays(year, bundesland) {
+      const bl = GERMAN_STATES.some(s => s.code === bundesland) ? bundesland : 'SN';
       const getEaster = (y) => {
         const a = y % 19, b = Math.floor(y / 100), c = y % 100;
         const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
@@ -91,7 +181,6 @@
         [`${year}-01-01`]: 'Neujahr',
         [`${year}-05-01`]: 'Tag der Arbeit',
         [`${year}-10-03`]: 'Tag der Deutschen Einheit',
-        [`${year}-10-31`]: 'Reformationstag',
         [`${year}-12-25`]: '1. Weihnachtstag',
         [`${year}-12-26`]: '2. Weihnachtstag',
         [format(addDays(easter, -2))]: 'Karfreitag',
@@ -100,16 +189,70 @@
         [format(addDays(easter, 50))]: 'Pfingstmontag',
       };
 
-      const nov23 = new Date(year, 10, 23);
-      let bussBettag = new Date(nov23);
-      let dayOfWeek = bussBettag.getDay();
-      let diff = dayOfWeek >= 3 ? dayOfWeek - 3 : 7 - (3 - dayOfWeek);
-      if (diff === 0) diff = 7;
-      bussBettag.setDate(bussBettag.getDate() - diff);
-      holidays[format(bussBettag)] = 'Buß- und Bettag';
+      const inState = (codes) => codes.includes(bl);
+      if (inState(['BW', 'BY', 'ST'])) holidays[`${year}-01-06`] = 'Heilige Drei Könige';
+      if (inState(['BE', 'MV'])) holidays[`${year}-03-08`] = 'Internationaler Frauentag';
+      if (inState(['BB', 'HB', 'HH', 'MV', 'NI', 'SH', 'SN', 'ST', 'TH'])) holidays[`${year}-10-31`] = 'Reformationstag';
+      if (inState(['BW', 'BY', 'HE', 'NW', 'RP'])) holidays[format(addDays(easter, 60))] = 'Fronleichnam';
+      if (inState(['BY', 'SL'])) holidays[`${year}-08-15`] = 'Mariä Himmelfahrt';
+      if (inState(['BW', 'BY', 'NW', 'RP', 'SL'])) holidays[`${year}-11-01`] = 'Allerheiligen';
+      if (inState(['TH'])) holidays[`${year}-09-20`] = 'Weltkindertag';
+      if (inState(['BB'])) {
+        holidays[format(easter)] = 'Ostersonntag';
+        holidays[format(addDays(easter, 49))] = 'Pfingstsonntag';
+      }
+      if (bl === 'SN') {
+        const nov23 = new Date(year, 10, 23);
+        let bussBettag = new Date(nov23);
+        let dayOfWeek = bussBettag.getDay();
+        let diff = dayOfWeek >= 3 ? dayOfWeek - 3 : 7 - (3 - dayOfWeek);
+        if (diff === 0) diff = 7;
+        bussBettag.setDate(bussBettag.getDate() - diff);
+        holidays[format(bussBettag)] = 'Buß- und Bettag';
+      }
 
       return holidays;
     }
+
+    // Prüft, ob ein Datum der x-te bestimmte Wochentag im Monat ist (week: 1-4 oder 'last')
+    function isNthWeekdayOfMonth(date, week, weekday) {
+      if (date.getDay() !== weekday) return false;
+      if (week === 'last') {
+        const next = new Date(date);
+        next.setDate(next.getDate() + 7);
+        return next.getMonth() !== date.getMonth();
+      }
+      return Math.floor((date.getDate() - 1) / 7) + 1 === parseInt(week, 10);
+    }
+
+    // Prüft, ob ein Muster an einem Datum greift (wöchentlich, 2-wöchentlich oder monatlich)
+    function patternMatchesDate(pat, date, slot) {
+      if (pat.frequency === 'monthly') {
+        if (pat.monthlyMode === 'nthWeekday') return isNthWeekdayOfMonth(date, pat.monthlyWeek, parseInt(pat.monthlyWeekDay, 10));
+        return date.getDate() === (parseInt(pat.monthlyDay, 10) || 1);
+      }
+      if (!slot || slot.dayOfWeek !== date.getDay()) return false;
+      if (pat.frequency === 'weekly') return true;
+      if (pat.frequency === 'biweekly') {
+        const isoWeek = getIsoWeek(date);
+        const isEvenWeek = isoWeek % 2 === 0;
+        const weekNum = Math.floor(date.getDate() / 7);
+        return (pat.weekParity === 'even' && isEvenWeek) ||
+          (pat.weekParity === 'odd' && !isEvenWeek) ||
+          (!pat.weekParity && weekNum % 2 === 0);
+      }
+      return false;
+    }
+
+    // ---------- Sync-Handshake: Schlüssel = Code + Geheimtoken ----------
+    const generateSyncToken = () => {
+      const bytes = new Uint8Array(24);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('').slice(0, 32);
+    };
+    const isHelloValid = (msg, token) => !!msg && typeof msg === 'object' && msg.type === 'hello' && typeof msg.token === 'string' && msg.token.length > 0 && msg.token === token;
+    const isSyncEnvelope = (msg) => !!msg && typeof msg === 'object' && msg.type === 'sync' && !!msg.data;
+    const syncKeyOf = (code, token) => `${code}.${token}`;
 
     const INITIAL_LOCATIONS = [
       { id: 'loc-1', name: 'Hauptgebäude' },
@@ -124,6 +267,8 @@
       { id: 'slot-4', dayOfWeek: 0, time: '09:30' }
     ];
 
+    const INITIAL_GROUPS = [];
+
     const INITIAL_PATTERNS = [
       { id: 'pat-1', slotId: 'slot-1', locationId: 'loc-1', frequency: 'weekly' },
       { id: 'pat-2', slotId: 'slot-2', locationId: 'loc-2', frequency: 'biweekly' },
@@ -132,7 +277,7 @@
     ];
 
     const INITIAL_PEOPLE = [
-      { id: 'p-1', name: 'Markus Pauli', absences: [], matrix: { 'slot-1_loc-1': true, 'slot-3_loc-2': true } },
+      { id: 'p-1', name: 'Markus', absences: [], matrix: { 'slot-1_loc-1': true, 'slot-3_loc-2': true } },
       { id: 'p-2', name: 'Anna', absences: [], matrix: { 'slot-1_loc-1': true, 'slot-3_loc-2': true } },
       { id: 'p-3', name: 'Ben', absences: [], matrix: { 'slot-2_loc-2': true, 'slot-3_loc-2': true } },
       { id: 'p-4', name: 'Clara', absences: [], matrix: { 'slot-4_loc-1': true, 'slot-1_loc-1': true } }
@@ -160,6 +305,14 @@
       const [newPatLoc, setNewPatLoc] = useState('');
       const [newPatFreq, setNewPatFreq] = useState('weekly');
       const [newPatParity, setNewPatParity] = useState('even');
+      const [newPatMonthlyMode, setNewPatMonthlyMode] = useState('dayOfMonth');
+      const [newPatMonthlyDay, setNewPatMonthlyDay] = useState('1');
+      const [newPatMonthlyWeek, setNewPatMonthlyWeek] = useState('1');
+      const [newPatMonthlyWeekDay, setNewPatMonthlyWeekDay] = useState('1');
+      const [newPatGroupIds, setNewPatGroupIds] = useState([]);
+      const [newGroupName, setNewGroupName] = useState('');
+      const [editPatGroupIds, setEditPatGroupIds] = useState([]);
+      const [newTaskGroupIds, setNewTaskGroupIds] = useState([]);
       const [editingPattern, setEditingPattern] = useState(null);
 
       // State für manuelle Abwesenheiten pro Person
@@ -167,90 +320,589 @@
       const [editingAbsence, setEditingAbsence] = useState(null);
 
       const [toast, setToast] = useState(null);
+      const [updateAvailable, setUpdateAvailable] = useState(false);
+      const [syncOpen, setSyncOpen] = useState(false);
+      const [sync, setSync] = useState(null);
+      const [syncCodeInput, setSyncCodeInput] = useState('');
+      const syncPeerRef = useRef(null);
+      const syncConnRef = useRef(null);
+      const qrRef = useRef(null);
+      const suppressSendRef = useRef(false);
+      const versionWarnRef = useRef(null);
+      const connectTimerRef = useRef(null);
+      const reconnectAttemptsRef = useRef(0);
+      const [syncLog, setSyncLog] = useState(() => JSON.parse(localStorage.getItem('app_synclog')) || []);
+      const [bundesland, setBundesland] = useState(() => localStorage.getItem('app_bundesland') || 'SN');
+      useEffect(() => localStorage.setItem('app_bundesland', bundesland), [bundesland]);
+      const [groups, setGroups] = useState(() => JSON.parse(localStorage.getItem('app_groups')) || INITIAL_GROUPS);
+      useEffect(() => localStorage.setItem('app_groups', JSON.stringify(groups)), [groups]);
+
+      // Lösch-Markierungen (Tombstones): Gelöschte IDs werden gemerkt und mit synchronisiert,
+      // damit Löschungen auf anderen Geräten nicht durch den Union-Merge wiederhergestellt werden.
+      const TOMBSTONE_COLLECTIONS = ['locations', 'timeSlots', 'patterns', 'groups', 'people', 'schedule', 'absences'];
+      const normalizeTombstones = (raw) => {
+        const base = {};
+        TOMBSTONE_COLLECTIONS.forEach(c => { base[c] = {}; });
+        if (!raw || typeof raw !== 'object') return base;
+        TOMBSTONE_COLLECTIONS.forEach(c => {
+          const entry = raw[c];
+          const map = {};
+          if (Array.isArray(entry)) {
+            entry.forEach(id => { if (typeof id === 'string' && id) map[id] = 0; });
+          } else if (entry && typeof entry === 'object') {
+            Object.entries(entry).forEach(([id, ts]) => { if (id && typeof ts === 'number') map[id] = ts; });
+          }
+          const ids = Object.keys(map);
+          if (ids.length > 500) {
+            ids.sort((a, b) => map[a] - map[b]).slice(0, ids.length - 500).forEach(id => { delete map[id]; });
+          }
+          base[c] = map;
+        });
+        return base;
+      };
+      const [tombstones, setTombstones] = useState(() => normalizeTombstones(JSON.parse(localStorage.getItem('app_tombstones'))));
+      const markDeleted = (collection, id) => {
+        if (!id || !TOMBSTONE_COLLECTIONS.includes(collection)) return;
+        setTombstones(prev => normalizeTombstones({ ...prev, [collection]: { ...(prev[collection] || {}), [id]: Date.now() } }));
+      };
 
       useEffect(() => localStorage.setItem('app_locs', JSON.stringify(locations)), [locations]);
       useEffect(() => localStorage.setItem('app_slots', JSON.stringify(timeSlots)), [timeSlots]);
       useEffect(() => localStorage.setItem('app_pats', JSON.stringify(patterns)), [patterns]);
       useEffect(() => localStorage.setItem('app_people', JSON.stringify(people)), [people]);
       useEffect(() => localStorage.setItem('app_sched', JSON.stringify(schedule)), [schedule]);
+      useEffect(() => localStorage.setItem('app_synclog', JSON.stringify(syncLog)), [syncLog]);
+      useEffect(() => localStorage.setItem('app_tombstones', JSON.stringify(tombstones)), [tombstones]);
+
+      // PWA: Service Worker registrieren und periodisch nach einer neuen Server-Version prüfen
+      useEffect(() => {
+        if (!location.protocol.startsWith('http')) return;
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+        const checkVersion = async () => {
+          try {
+            const res = await fetch(`version.json?ts=${Date.now()}`, { cache: 'no-store' });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.version && data.version !== APP_VERSION) setUpdateAvailable(true);
+          } catch (err) {}
+        };
+        checkVersion();
+        const interval = setInterval(checkVersion, 5 * 60 * 1000);
+        window.addEventListener('focus', checkVersion);
+        return () => {
+          clearInterval(interval);
+          window.removeEventListener('focus', checkVersion);
+        };
+      }, []);
 
       const showToast = (msg, type = 'info') => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3500);
       };
 
+      // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
+      const SYNC_PREFIX = 'aufgabenplaner-';
+
+      const collectSyncData = () => ({ appVersion: APP_VERSION, locations, timeSlots, patterns, groups, people, schedule, tombstones });
+
+      const mergeById = (local, incoming) => {
+        const map = new Map((local || []).map(item => [item.id, item]));
+        (incoming || []).forEach(item => { if (item && item.id && !map.has(item.id)) map.set(item.id, item); });
+        return [...map.values()];
+      };
+
+      // Termine: Last-Update-wins – neuere Änderungen (z. B. Zuteilungen) setzen sich durch
+      const mergeTasks = (local, incoming) => {
+        const map = new Map((local || []).map(item => [item.id, item]));
+        (incoming || []).forEach(item => {
+          if (!item || !item.id) return;
+          const cur = map.get(item.id);
+          if (!cur || (item.updatedAt || 0) > (cur.updatedAt || 0)) map.set(item.id, item);
+        });
+        return [...map.values()];
+      };
+
+      const addSyncLog = (direction, text) => {
+        setSyncLog(prev => [...prev.slice(-199), { time: new Date().toLocaleTimeString('de-DE'), direction, text }]);
+      };
+
+      // Stabler Vergleich (Schlüssel sortiert), um unnötige State-Updates und Echo-Sends zu vermeiden
+      const stableStringify = (v) => {
+        if (Array.isArray(v)) return '[' + v.map(stableStringify).join(',') + ']';
+        if (v && typeof v === 'object') {
+          return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
+        }
+        return JSON.stringify(v);
+      };
+
+      const applySyncData = (data) => {
+        if (!data || typeof data !== 'object') return;
+        suppressSendRef.current = true;
+        if (data.appVersion && data.appVersion !== APP_VERSION && versionWarnRef.current !== data.appVersion) {
+          versionWarnRef.current = data.appVersion;
+          addSyncLog('info', `⚠️ Versionsunterschied: anderes Gerät v${data.appVersion}, dieses Gerät v${APP_VERSION} – bitte auf beiden Geräten aktualisieren!`);
+        }
+        const incomingTombstones = normalizeTombstones(data.tombstones);
+        const mergedTombstones = normalizeTombstones(tombstones);
+        TOMBSTONE_COLLECTIONS.forEach(c => {
+          Object.entries(incomingTombstones[c] || {}).forEach(([id, ts]) => {
+            mergedTombstones[c][id] = Math.max(mergedTombstones[c][id] || 0, ts);
+          });
+        });
+        const isDeleted = (collection, id, updatedAt) => {
+          const ts = mergedTombstones[collection][id];
+          if (ts === undefined) return false;
+          return updatedAt ? ts > updatedAt : true;
+        };
+        const revive = (collection, id) => { delete mergedTombstones[collection][id]; };
+
+        const added = { locations: 0, timeSlots: 0, patterns: 0, groups: 0, people: 0, schedule: 0, deletions: 0 };
+        let changed = false;
+
+        if (Array.isArray(data.locations)) {
+          const filtered = data.locations.filter(i => i && i.id && !isDeleted('locations', i.id, i.updatedAt));
+          filtered.forEach(i => { if (i.updatedAt) revive('locations', i.id); });
+          const keptLocal = locations.filter(l => !isDeleted('locations', l.id, l.updatedAt));
+          added.deletions += locations.length - keptLocal.length;
+          added.locations = filtered.filter(i => !locations.some(l => l.id === i.id)).length;
+          const next = mergeById(keptLocal, filtered);
+          if (stableStringify(next) !== stableStringify(locations)) { changed = true; setLocations(next); }
+        }
+        if (Array.isArray(data.timeSlots)) {
+          const filtered = data.timeSlots.filter(i => i && i.id && !isDeleted('timeSlots', i.id, i.updatedAt));
+          filtered.forEach(i => { if (i.updatedAt) revive('timeSlots', i.id); });
+          const keptLocal = timeSlots.filter(l => !isDeleted('timeSlots', l.id, l.updatedAt));
+          added.deletions += timeSlots.length - keptLocal.length;
+          added.timeSlots = filtered.filter(i => !timeSlots.some(l => l.id === i.id)).length;
+          const next = mergeById(keptLocal, filtered);
+          if (stableStringify(next) !== stableStringify(timeSlots)) { changed = true; setTimeSlots(next); }
+        }
+        if (Array.isArray(data.patterns)) {
+          const filtered = data.patterns.filter(i => i && i.id && !isDeleted('patterns', i.id, i.updatedAt));
+          filtered.forEach(i => { if (i.updatedAt) revive('patterns', i.id); });
+          const keptLocal = patterns.filter(l => !isDeleted('patterns', l.id, l.updatedAt));
+          added.deletions += patterns.length - keptLocal.length;
+          added.patterns = filtered.filter(i => !patterns.some(l => l.id === i.id)).length;
+          const next = mergeTasks(keptLocal, filtered);
+          if (stableStringify(next) !== stableStringify(patterns)) { changed = true; setPatterns(next); }
+        }
+        if (Array.isArray(data.groups)) {
+          const filtered = data.groups.filter(i => i && i.id && !isDeleted('groups', i.id, i.updatedAt));
+          filtered.forEach(i => { if (i.updatedAt) revive('groups', i.id); });
+          const keptLocal = groups.filter(l => !isDeleted('groups', l.id, l.updatedAt));
+          added.deletions += groups.length - keptLocal.length;
+          added.groups = filtered.filter(i => !groups.some(l => l.id === i.id)).length;
+          const next = mergeTasks(keptLocal, filtered);
+          if (stableStringify(next) !== stableStringify(groups)) { changed = true; setGroups(next); }
+        }
+        if (Array.isArray(data.schedule)) {
+          const filtered = data.schedule.filter(i => i && i.id && !isDeleted('schedule', i.id, i.updatedAt));
+          filtered.forEach(i => { if (i.updatedAt) revive('schedule', i.id); });
+          const keptLocal = schedule.filter(l => !isDeleted('schedule', l.id, l.updatedAt));
+          added.deletions += schedule.length - keptLocal.length;
+          added.schedule = filtered.filter(i => !schedule.some(l => l.id === i.id)).length;
+          const next = mergeTasks(keptLocal, filtered);
+          if (stableStringify(next) !== stableStringify(schedule)) { changed = true; setSchedule(next); }
+        }
+        if (Array.isArray(data.people)) {
+          const keptLocalPeople = people.filter(p => !isDeleted('people', p.id, p.updatedAt));
+          added.deletions += people.length - keptLocalPeople.length;
+          const map = new Map(keptLocalPeople.map(p => [p.id, p]));
+          data.people.forEach(inc => {
+            if (!inc || !inc.id || isDeleted('people', inc.id, inc.updatedAt)) return;
+            if (inc.updatedAt) revive('people', inc.id);
+            const cur = map.get(inc.id);
+            if (!cur) { added.people++; map.set(inc.id, inc); return; }
+            const mergedMatrix = { ...(inc.matrix || {}) };
+            Object.entries(cur.matrix || {}).forEach(([key, val]) => { if (val) mergedMatrix[key] = true; });
+            map.set(inc.id, {
+              ...cur,
+              absences: mergeById(
+                (cur.absences || []).filter(a => !isDeleted('absences', a.id)),
+                (inc.absences || []).filter(a => !isDeleted('absences', a.id))
+              ),
+              matrix: mergedMatrix,
+              shiftRotation: cur.shiftRotation || inc.shiftRotation || null
+            });
+          });
+          const nextPeople = [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+          if (stableStringify(nextPeople) !== stableStringify(people)) { changed = true; setPeople(nextPeople); }
+        }
+        if (stableStringify(mergedTombstones) !== stableStringify(tombstones)) {
+          changed = true;
+          setTombstones(mergedTombstones);
+        }
+        if (changed) {
+          const logText = `Übernommen: ${added.locations} Orte, ${added.timeSlots} Zeitslots, ${added.patterns} Muster, ${added.groups} Gruppen, ${added.people} Personen, ${added.schedule} Termine` + (added.deletions > 0 ? `, ${added.deletions} Löschungen` : '');
+          addSyncLog('empfangen', logText);
+        }
+        setTimeout(() => { suppressSendRef.current = false; }, 800);
+      };;
+
+      const PAIRING_KEY = 'app_sync_pairing';
+
+      const getPairing = () => {
+        try {
+          const data = JSON.parse(localStorage.getItem(PAIRING_KEY));
+          return data && data.role && data.code && data.token ? data : null;
+        } catch (err) {
+          return null;
+        }
+      };
+
+      const teardownSync = () => {
+        if (syncConnRef.current) { try { syncConnRef.current.close(); } catch (err) {} syncConnRef.current = null; }
+        if (syncPeerRef.current) { try { syncPeerRef.current.destroy(); } catch (err) {} syncPeerRef.current = null; }
+      };
+
+      const closeSyncModal = () => setSyncOpen(false);
+
+      const disconnectSync = () => {
+        localStorage.removeItem(PAIRING_KEY);
+        if (connectTimerRef.current) { clearTimeout(connectTimerRef.current); connectTimerRef.current = null; }
+        teardownSync();
+        setSync(s => (s ? { ...s, status: 'closed' } : s));
+        setSyncCodeInput('');
+        addSyncLog('info', 'Verbindung getrennt und Kopplung gelöscht');
+      };
+
+      const scheduleReconnect = (role, code, token, delay = 10000) => {
+        if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+        reconnectAttemptsRef.current += 1;
+        connectTimerRef.current = setTimeout(() => {
+          connectTimerRef.current = null;
+          const pairing = getPairing();
+          if (!pairing || pairing.role !== role || pairing.code !== code || pairing.token !== token) return;
+          if (reconnectAttemptsRef.current % 5 === 1) {
+            addSyncLog('info', `Automatischer Wiederverbindungsversuch (Code ${code})…`);
+          }
+          if (reconnectAttemptsRef.current === 6) {
+            addSyncLog('info', 'Gegenstelle weiterhin nicht erreichbar – prüfe auf dem anderen Gerät, ob der Geräte-Sync läuft und welcher Code dort angezeigt wird.');
+          }
+          establishSync(role, code, token);
+        }, delay);
+      };
+
+      const attachConnHandlers = (conn, token) => {
+        conn.__verified = false;
+        conn.on('open', () => {
+          reconnectAttemptsRef.current = 0;
+          setSync(s => (s ? { ...s, status: 'connecting' } : s));
+          addSyncLog('info', 'Verbindung hergestellt – Gegenstelle wird authentifiziert…');
+          conn.send({ type: 'hello', token });
+        });
+        conn.on('data', (data) => {
+          if (!conn.__verified) {
+            if (isHelloValid(data, token)) {
+              conn.__verified = true;
+              setSync(s => (s ? { ...s, status: 'connected' } : s));
+              addSyncLog('info', 'Gegenstelle authentifiziert – Anfangsabgleich läuft');
+              conn.send({ type: 'sync', data: collectSyncData() });
+            } else {
+              if (syncConnRef.current === conn) syncConnRef.current = null;
+              addSyncLog('info', '⚠ Verbindungsversuch mit ungültigem Schlüssel abgewiesen.');
+              setSync(s => (s ? { ...s, status: s.role === 'host' ? 'waiting' : 'error', message: s.role === 'host' ? undefined : 'Authentifizierung fehlgeschlagen – bitte vollständigen Schlüssel prüfen.' } : s));
+              try { conn.close(); } catch (err) {}
+            }
+            return;
+          }
+          if (isSyncEnvelope(data)) applySyncData(data.data);
+        });
+        conn.on('close', () => {
+          if (syncConnRef.current !== conn) return;
+          setSync(s => (s && s.status === 'connected' ? { ...s, status: 'closed' } : s));
+          addSyncLog('info', 'Verbindung getrennt – automatischer Wiederaufbau läuft…');
+          const pairing = getPairing();
+          if (pairing) scheduleReconnect(pairing.role, pairing.code, pairing.token, 3000);
+        });
+      };
+
+      const establishSync = (role, code, token) => {
+        if (typeof Peer === 'undefined') {
+          showToast('PeerJS nicht geladen – bitte Internetverbindung prüfen.', 'error');
+          return;
+        }
+        const existingPeer = syncPeerRef.current;
+        if (existingPeer && !existingPeer.destroyed) {
+          const curConn = syncConnRef.current;
+          if (curConn && !curConn.destroyed && curConn.open) return;
+          if (!existingPeer.disconnected) {
+            if (role === 'client') {
+              setSync(s => (s ? { ...s, status: 'connecting' } : s));
+              const newConn = existingPeer.connect(SYNC_PREFIX + code, { reliable: true });
+              syncConnRef.current = newConn;
+              attachConnHandlers(newConn, token);
+            }
+            return;
+          }
+          try { existingPeer.reconnect(); return; } catch (err) {}
+          teardownSync();
+        } else if (existingPeer) {
+          teardownSync();
+        }
+        setSync({ role, code, token, status: role === 'host' ? 'waiting' : 'connecting' });
+        const peerOptions = {
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+              { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+              { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+              { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+            ]
+          }
+        };
+        const peer = role === 'host' ? new Peer(SYNC_PREFIX + code, peerOptions) : new Peer(peerOptions);
+        syncPeerRef.current = peer;
+        peer.on('open', () => {
+          if (role === 'client') {
+            if (syncConnRef.current && !syncConnRef.current.destroyed && syncConnRef.current.open) return;
+            const conn = peer.connect(SYNC_PREFIX + code, { reliable: true });
+            syncConnRef.current = conn;
+            attachConnHandlers(conn, token);
+          }
+        });
+        if (role === 'host') {
+          peer.on('connection', (conn) => {
+            if (syncConnRef.current && syncConnRef.current !== conn) {
+              try { syncConnRef.current.close(); } catch (err) {}
+            }
+            syncConnRef.current = conn;
+            attachConnHandlers(conn, token);
+          });
+        }
+        peer.on('disconnected', () => {
+          addSyncLog('info', 'Signaling-Verbindung verloren – Neuanmeldung läuft…');
+          try { peer.reconnect(); } catch (err) {}
+        });
+        peer.on('error', (err) => {
+          teardownSync();
+          let msg = `Verbindungsfehler: ${err.type}`;
+          if (err.type === 'peer-unavailable') {
+            msg = 'Kein Gerät mit diesem Code gefunden.';
+            const pairing = getPairing();
+            if (pairing) {
+              scheduleReconnect(pairing.role, pairing.code, pairing.token);
+              addSyncLog('info', `${msg} – automatischer Wiederholungsversuch folgt.`);
+              setSync(s => (s ? { ...s, status: 'connecting' } : s));
+              return;
+            }
+          } else if (err.type === 'unavailable-id') {
+            msg = 'Code kurzzeitig belegt – automatischer neuer Versuch folgt…';
+          }
+          addSyncLog('info', `Fehler: ${msg}`);
+          setSync(s => (s ? { ...s, status: 'error', message: msg } : s));
+          const pairing = getPairing();
+          if (pairing && (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed' || err.type === 'unavailable-id')) {
+            scheduleReconnect(pairing.role, pairing.code, pairing.token);
+          }
+        });
+      };
+
+      const startSyncHost = () => {
+        const existing = getPairing();
+        const reuse = existing && existing.role === 'host' && /^\d{8}$/.test(existing.code) && existing.token;
+        const code = reuse ? existing.code : String(Math.floor(10000000 + Math.random() * 90000000));
+        const token = reuse ? existing.token : generateSyncToken();
+        localStorage.setItem(PAIRING_KEY, JSON.stringify({ role: 'host', code, token }));
+        reconnectAttemptsRef.current = 0;
+        addSyncLog('info', `Sync gestartet – warte auf zweites Gerät (Code ${code}${reuse ? ', bisheriger Schlüssel beibehalten' : ', neuer Schlüssel erzeugt'}). Kopplung wird dauerhaft gespeichert.`);
+        establishSync('host', code, token);
+      };
+
+      const connectSyncAsClient = (e) => {
+        if (e) e.preventDefault();
+        const m = /^(\d{8})[.\-:_ ]+([a-z0-9]{10,})$/i.exec(syncCodeInput.trim());
+        if (!m) {
+          showToast('Bitte den vollständigen Schlüssel eingeben (Code.Schlüssel – QR-Code scannen oder Schlüssel kopieren).', 'error');
+          return;
+        }
+        const code = m[1];
+        const token = m[2];
+        localStorage.setItem(PAIRING_KEY, JSON.stringify({ role: 'client', code, token }));
+        reconnectAttemptsRef.current = 0;
+        addSyncLog('info', `Verbinde mit Code ${code}… Kopplung wird dauerhaft gespeichert.`);
+        establishSync('client', code, token);
+      };
+
+      const copySyncCode = async () => {
+        if (!sync?.code || !sync?.token) return;
+        try {
+          await navigator.clipboard.writeText(syncKeyOf(sync.code, sync.token));
+          showToast('Schlüssel kopiert!', 'success');
+        } catch (err) {
+          const ta = document.createElement('textarea');
+          ta.value = syncKeyOf(sync.code, sync.token);
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+          showToast('Schlüssel kopiert!', 'success');
+        }
+      };
+
+      const pasteSyncCode = async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          const m = /(\d{8})[.\-:_ ]*([a-z0-9]{10,})/i.exec(text || '');
+          if (m) setSyncCodeInput(`${m[1]}.${m[2]}`);
+          else showToast('Zwischenablage enthält keinen gültigen Schlüssel.', 'error');
+        } catch (err) {
+          showToast('Zwischenablage nicht verfügbar – bitte Schlüssel manuell eingeben.', 'error');
+        }
+      };
+
+      useEffect(() => {
+        if (syncOpen && sync && sync.role === 'host' && sync.code && qrRef.current && typeof QRCode !== 'undefined') {
+          qrRef.current.innerHTML = '';
+          new QRCode(qrRef.current, { text: syncKeyOf(sync.code, sync.token), width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
+        }
+      }, [syncOpen, sync]);
+
+      // Automatische Synchronisierung: Bei jeder Datenänderung den Stand an das verbundene Gerät senden
+      useEffect(() => {
+        if (!syncConnRef.current || !syncConnRef.current.open || !syncConnRef.current.__verified || suppressSendRef.current) return;
+        const timer = setTimeout(() => {
+          if (syncConnRef.current && syncConnRef.current.open && syncConnRef.current.__verified && !suppressSendRef.current) {
+            syncConnRef.current.send({ type: 'sync', data: collectSyncData() });
+            addSyncLog('gesendet', 'Änderungen automatisch übertragen');
+          }
+        }, 500);
+        return () => clearTimeout(timer);
+      }, [locations, timeSlots, patterns, people, schedule, tombstones]);
+
+      // Dauerhafte Kopplung: Gespeicherte Sync-Verbindung beim Start automatisch wiederherstellen
+      useEffect(() => {
+        const pairing = getPairing();
+        if (pairing) {
+          addSyncLog('info', `Gespeicherte Kopplung gefunden (Code ${pairing.code}) – Verbindung wird wiederhergestellt…`);
+          establishSync(pairing.role, pairing.code, pairing.token);
+        } else {
+          try {
+            const legacy = JSON.parse(localStorage.getItem(PAIRING_KEY));
+            if (legacy && legacy.role && legacy.code) {
+              localStorage.removeItem(PAIRING_KEY);
+              addSyncLog('info', 'Alte Kopplung ist durch das Sicherheits-Update ungültig – bitte die Geräte neu koppeln.');
+            }
+          } catch (err) {}
+        }
+        return () => {
+          if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+        };
+      }, []);
+
+      // Netzwerk-Rückkehr / App-Aktivierung: Signaling sofort neu aufbauen, falls es gekappt wurde
+      useEffect(() => {
+        const tryImmediateReconnect = () => {
+          const pairing = getPairing();
+          if (!pairing) return;
+          const peer = syncPeerRef.current;
+          if (peer && !peer.destroyed && peer.disconnected) {
+            addSyncLog('info', 'Netzwerk zurück – Signaling wird sofort neu aufgebaut…');
+            try { peer.reconnect(); } catch (err) {}
+          } else if ((!peer || peer.destroyed) && !connectTimerRef.current) {
+            scheduleReconnect(pairing.role, pairing.code, pairing.token, 1000);
+          }
+        };
+        const onVisible = () => { if (document.visibilityState === 'visible') tryImmediateReconnect(); };
+        window.addEventListener('online', tryImmediateReconnect);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+          window.removeEventListener('online', tryImmediateReconnect);
+          document.removeEventListener('visibilitychange', onVisible);
+        };
+      }, []);
+
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
-      const holidays = useMemo(() => getGermanHolidaysSaxony(year), [year]);
+      const holidays = useMemo(() => getGermanHolidays(year, bundesland), [year, bundesland]);
 
-      const getPersonAvailabilityDetails = (person, slotId, locationId, dateStr) => {
+      const getPersonAvailabilityDetails = (person, slotId, locationId, dateStr, groupIds) => {
         const slot = timeSlots.find(s => s.id === slotId);
         if (!slot) return { isAvailable: false, reason: 'Ungültiger Zeitslot' };
 
+        if (Array.isArray(groupIds) && groupIds.length > 0) {
+          const isMember = groupIds.some(gid => groups.find(g => g.id === gid)?.personIds?.includes(person.id));
+          if (!isMember) return { isAvailable: false, reason: 'Nicht in relevanter Gruppe' };
+        }
+
         const isAbsent = person.absences?.some(abs => dateStr >= abs.start && dateStr <= abs.end);
         if (isAbsent) return { isAvailable: false, reason: 'Abwesend/Urlaub' };
+
+        const shiftBlock = getExternalShiftBlock(person, dateStr, slot.time);
+        if (shiftBlock) {
+          return { isAvailable: false, reason: `Schicht: ${shiftBlock}` };
+        }
 
         const matchSlot = timeSlots.find(s => s.dayOfWeek === slot.dayOfWeek && s.time === slot.time);
         if (!matchSlot) return { isAvailable: false, reason: 'Kein passender Slot' };
 
         const matrixKey = `${matchSlot.id}_${locationId}`;
         const isQualified = !!person.matrix?.[matrixKey];
-        if (!isQualified) return { isAvailable: false, reason: 'Nicht qualifiziert' };
+        if (!isQualified) return { isAvailable: false, reason: 'Nicht für diesen Ort/Zeitslot qualifiziert' };
 
         return { isAvailable: true, reason: 'Verfügbar' };
       };
 
-      const getRecommendedPersonIdForTask = (task) => {
+      // Einsatz-Bilanz aufbauen (optional eine Aufgabe ausschließen, z. B. die bewertete selbst)
+      const buildAssignmentStats = (scheduleList, peopleList, excludeTaskId, untilDateStr) => {
         const counts = {};
         const weekdayCounts = {};
         const lastAssignedDate = {};
-        people.forEach(p => {
+        peopleList.forEach(p => {
           counts[p.id] = 0;
           weekdayCounts[p.id] = {};
           for (let i = 0; i < 7; i++) weekdayCounts[p.id][i] = 0;
           lastAssignedDate[p.id] = null;
         });
-        schedule.forEach(t => {
-          if (t.assignedPersonId && counts[t.assignedPersonId] !== undefined) {
-            counts[t.assignedPersonId]++;
-            const taskDate = parseLocalDate(t.dateStr);
-            const wDay = taskDate.getDay();
-            weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
-            if (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId]) {
-              lastAssignedDate[t.assignedPersonId] = t.dateStr;
-            }
+        scheduleList.forEach(t => {
+          if (!t.assignedPersonId || t.id === excludeTaskId || counts[t.assignedPersonId] === undefined) return;
+          // Gruppen-Termine laufen außer Konkurrenz: Zuteilungen dort zählen in keiner Bilanz
+          if (Array.isArray(t.groupIds) && t.groupIds.length > 0) return;
+          const isFuture = untilDateStr && t.dateStr > untilDateStr;
+          if (isFuture && t.assignedBy !== 'manual') return;
+          counts[t.assignedPersonId]++;
+          const taskDate = parseLocalDate(t.dateStr);
+          const wDay = taskDate.getDay();
+          weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
+          if (!isFuture && (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId])) {
+            lastAssignedDate[t.assignedPersonId] = t.dateStr;
           }
         });
+        return { counts, weekdayCounts, lastAssignedDate };
+      };
 
-        const candidates = people.filter(p => {
-          const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
-          return details.isAvailable;
-        });
-        if (candidates.length === 0) return null;
-
+      // Fair-Sortierung: 1. längste Pause, 2. weniger Gesamteinsätze, 3. Wochentags-Balance, 4. alphabetisch
+      const sortCandidatesByFairness = (candidates, task, stats) => {
         const taskDate = parseLocalDate(task.dateStr);
         const taskWDay = taskDate.getDay();
+        return [...candidates].sort((a, b) => {
+          const lastA = stats.lastAssignedDate[a.id] ? parseLocalDate(stats.lastAssignedDate[a.id]) : null;
+          const lastB = stats.lastAssignedDate[b.id] ? parseLocalDate(stats.lastAssignedDate[b.id]) : null;
+          const daysA = lastA ? Math.max(0, (taskDate - lastA) / 86400000) : Infinity;
+          const daysB = lastB ? Math.max(0, (taskDate - lastB) / 86400000) : Infinity;
+          if (daysA !== daysB) return daysB - daysA;
 
-        candidates.sort((a, b) => {
-          const diffCount = counts[a.id] - counts[b.id];
+          const diffCount = stats.counts[a.id] - stats.counts[b.id];
           if (diffCount !== 0) return diffCount;
 
-          const lastA = lastAssignedDate[a.id] ? parseLocalDate(lastAssignedDate[a.id]) : null;
-          const lastB = lastAssignedDate[b.id] ? parseLocalDate(lastAssignedDate[b.id]) : null;
-          const daysA = lastA ? (taskDate - lastA) / (1000 * 60 * 60 * 24) : 9999;
-          const daysB = lastB ? (taskDate - lastB) / (1000 * 60 * 60 * 24) : 9999;
-
-          if (Math.abs(daysA - daysB) > 0.5) {
-            return daysB - daysA;
-          }
-
-          const diffWDay = (weekdayCounts[a.id][taskWDay] || 0) - (weekdayCounts[b.id][taskWDay] || 0);
+          const diffWDay = (stats.weekdayCounts[a.id][taskWDay] || 0) - (stats.weekdayCounts[b.id][taskWDay] || 0);
           if (diffWDay !== 0) return diffWDay;
 
           return a.name.localeCompare(b.name, 'de');
         });
+      };
 
-        return candidates[0].id;
+      const getRecommendedPersonIdForTask = (task) => {
+        const candidates = people.filter(p => {
+          const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr, task.groupIds);
+          return details.isAvailable;
+        });
+        if (candidates.length === 0) return null;
+        const stats = buildAssignmentStats(schedule, people, task.id);
+        return sortCandidatesByFairness(candidates, task, stats)[0].id;
       };
 
       // 1. Termine generieren (Vollständige Kalenderwochen einbeziehen + Duplikatsprüfung)
@@ -280,27 +932,32 @@
 
           patterns.forEach(pat => {
             const slot = timeSlots.find(s => s.id === pat.slotId);
-            if (slot && slot.dayOfWeek === currDay) {
-              const isoWeek = getIsoWeek(curr);
-              const isEvenWeek = isoWeek % 2 === 0;
-              const matchesBiweekly = pat.frequency === 'biweekly' && (
-                (pat.weekParity === 'even' && isEvenWeek) || 
-                (pat.weekParity === 'odd' && !isEvenWeek) ||
-                (!pat.weekParity && weekNum % 2 === 0)
-              );
-              if (pat.frequency === 'weekly' || matchesBiweekly) {
-                // Duplikatsprüfung: Prüfen ob Task mit gleichem Datum, Zeitslot und Ort bereits existiert
-                const exists = schedule.some(t => t.dateStr === dateStr && t.slotId === pat.slotId && t.locationId === pat.locationId);
-                if (!exists) {
-                  newTasks.push({
-                    id: `task-${dateStr}-${pat.slotId}-${pat.locationId}`,
-                    dateStr,
-                    slotId: pat.slotId,
-                    locationId: pat.locationId,
-                    assignedPersonId: null,
-                    isManual: false
-                  });
-                }
+            if (slot && patternMatchesDate(pat, curr, slot)) {
+              // Duplikatsprüfung: Zur gleichen Zeit (Datum + Uhrzeit) darf nur ein Termin
+              // existieren – unabhängig von Slot-ID und Ort, auch innerhalb eines Durchlaufs
+              // und in überlappenden Kalenderwochen beim Monatswechsel
+              const groupScope = (ids) => Array.isArray(ids) ? [...ids].sort().join(',') : '';
+              const sameTime = (t) => {
+                if (t.dateStr !== dateStr) return false;
+                // Unterschiedliche Gruppen-Relevanz = eigener Termin (Gruppentermin parallel zum Normal-Termin erlaubt)
+                if (groupScope(t.groupIds) !== groupScope(pat.groupIds)) return false;
+                if (t.slotId === pat.slotId && t.locationId === pat.locationId) return true;
+                const tSlot = timeSlots.find(s => s.id === t.slotId);
+                return !!tSlot && !!slot && tSlot.time === slot.time;
+              };
+              const exists = schedule.some(sameTime) || newTasks.some(sameTime);
+              if (!exists) {
+                const patScope = groupScope(pat.groupIds);
+                newTasks.push({
+                  id: `task-${dateStr}-${pat.slotId}-${pat.locationId}${patScope ? '-grp-' + patScope.replace(/,/g, '-') : ''}`,
+                  dateStr,
+                  slotId: pat.slotId,
+                  locationId: pat.locationId,
+                  groupIds: Array.isArray(pat.groupIds) ? pat.groupIds : [],
+                  assignedPersonId: null,
+                  isManual: false,
+                  updatedAt: Date.now()
+                });
               }
             }
           });
@@ -308,8 +965,22 @@
         }
 
         if (newTasks.length > 0) {
-          setSchedule(prev => [...prev, ...newTasks]);
-          showToast(`${newTasks.length} neue Termine generiert (vollständige KW berücksichtigt).`, 'success');
+          const existingById = new Map(schedule.map(t => [t.id, t]));
+          const uniqueNew = [];
+          newTasks.forEach(t => {
+            const ex = existingById.get(t.id);
+            if (!ex) { existingById.set(t.id, t); uniqueNew.push(t); return; }
+            const exScope = Array.isArray(ex.groupIds) ? [...ex.groupIds].sort().join(',') : '';
+            const tScope = Array.isArray(t.groupIds) ? [...t.groupIds].sort().join(',') : '';
+            if (exScope === tScope) return;
+            let altId = t.id, n = 2;
+            while (existingById.has(altId)) { altId = `${t.id}-${n}`; n++; }
+            t.id = altId;
+            existingById.set(altId, t);
+            uniqueNew.push(t);
+          });
+          setSchedule(prev => [...prev, ...uniqueNew]);
+          showToast(`${uniqueNew.length} neue Termine generiert (vollständige KW berücksichtigt).`, 'success');
         } else {
           showToast('Keine neuen Termine generiert (alle passenden Termine existieren bereits).', 'info');
         }
@@ -333,81 +1004,59 @@
           return;
         }
 
-        // Zähler, Wochentags-Zähler und Datum des letzten Einsatzes initialisieren
-        const counts = {};
-        const weekdayCounts = {};
-        const lastAssignedDate = {};
-
-        people.forEach(p => {
-          counts[p.id] = 0;
-          weekdayCounts[p.id] = {};
-          for (let i = 0; i < 7; i++) weekdayCounts[p.id][i] = 0;
-          lastAssignedDate[p.id] = null;
-        });
-
-        // Bestehende Zuteilungen einlesen
+        // Fairness-Statistiken starten leer und werden chronologisch aufgebaut:
+        // nur bereits vergangene bzw. gleichzeitige Einsätze zählen, zukünftige nicht
+        const stats = buildAssignmentStats([], people, null, null);
+        // Manuell eingeteilte Termine (auch in der Zukunft) in die Bilanz einrechnen
         updatedSchedule.forEach(t => {
-          if (t.assignedPersonId && counts[t.assignedPersonId] !== undefined) {
-            counts[t.assignedPersonId]++;
-            const taskDate = parseLocalDate(t.dateStr);
-            const wDay = taskDate.getDay();
-            weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
-
-            if (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId]) {
-              lastAssignedDate[t.assignedPersonId] = t.dateStr;
-            }
+          if (Array.isArray(t.groupIds) && t.groupIds.length > 0) return;
+          if (t.assignedPersonId && t.assignedBy === 'manual' && stats.counts[t.assignedPersonId] !== undefined) {
+            stats.counts[t.assignedPersonId]++;
+            const wDay = parseLocalDate(t.dateStr).getDay();
+            stats.weekdayCounts[t.assignedPersonId][wDay] = (stats.weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
           }
         });
+        let histIdx = 0;
 
         let assignedCount = 0;
         updatedSchedule = updatedSchedule.map(task => {
+          while (histIdx < updatedSchedule.length && updatedSchedule[histIdx].dateStr <= task.dateStr) {
+            const hist = updatedSchedule[histIdx];
+            if (hist.assignedPersonId && !(Array.isArray(hist.groupIds) && hist.groupIds.length > 0) && stats.counts[hist.assignedPersonId] !== undefined) {
+              if (hist.assignedBy !== 'manual') {
+                stats.counts[hist.assignedPersonId]++;
+                const wDay = parseLocalDate(hist.dateStr).getDay();
+                stats.weekdayCounts[hist.assignedPersonId][wDay] = (stats.weekdayCounts[hist.assignedPersonId][wDay] || 0) + 1;
+              }
+              if (!stats.lastAssignedDate[hist.assignedPersonId] || hist.dateStr > stats.lastAssignedDate[hist.assignedPersonId]) {
+                stats.lastAssignedDate[hist.assignedPersonId] = hist.dateStr;
+              }
+            }
+            histIdx++;
+          }
           if (task.assignedPersonId) return task;
+          // Gruppen-Termine werden nur manuell zugeteilt
+          if (Array.isArray(task.groupIds) && task.groupIds.length > 0) return task;
 
           const candidates = people.filter(p => {
-            const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
+            const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr, task.groupIds);
             return details.isAvailable;
           });
 
           if (candidates.length > 0) {
-            const taskDate = parseLocalDate(task.dateStr);
-            const taskWDay = taskDate.getDay();
-
-            candidates.sort((a, b) => {
-              // 1. Primär: Gesamtanzahl Einsätze (Wer weniger hat, wird bevorzugt)
-              const diffCount = counts[a.id] - counts[b.id];
-              if (diffCount !== 0) return diffCount;
-
-              // 2. Sekundär: Zeitlicher Abstand / Pause (Wer länger Pause hatte, wird streng bevorzugt)
-              const lastA = lastAssignedDate[a.id] ? parseLocalDate(lastAssignedDate[a.id]) : null;
-              const lastB = lastAssignedDate[b.id] ? parseLocalDate(lastAssignedDate[b.id]) : null;
-
-              const daysA = lastA ? (taskDate - lastA) / (1000 * 60 * 60 * 24) : 9999;
-              const daysB = lastB ? (taskDate - lastB) / (1000 * 60 * 60 * 24) : 9999;
-
-              if (Math.abs(daysA - daysB) > 0.5) {
-                return daysB - daysA;
-              }
-
-              // 3. Tertiär: Wochentags-Balance (Wer an diesem Wochentag bisher seltener dran war)
-              const diffWDay = (weekdayCounts[a.id][taskWDay] || 0) - (weekdayCounts[b.id][taskWDay] || 0);
-              if (diffWDay !== 0) return diffWDay;
-
-              // 4. Quaternär: Alphabetisch / Zufall
-              return a.name.localeCompare(b.name, 'de');
-            });
-
-            const chosen = candidates[0];
-            counts[chosen.id]++;
-            weekdayCounts[chosen.id][taskWDay] = (weekdayCounts[chosen.id][taskWDay] || 0) + 1;
-            lastAssignedDate[chosen.id] = task.dateStr;
+            const chosen = sortCandidatesByFairness(candidates, task, stats)[0];
+            const taskWDay = parseLocalDate(task.dateStr).getDay();
+            stats.counts[chosen.id]++;
+            stats.weekdayCounts[chosen.id][taskWDay] = (stats.weekdayCounts[chosen.id][taskWDay] || 0) + 1;
+            stats.lastAssignedDate[chosen.id] = task.dateStr;
             assignedCount++;
-            return { ...task, assignedPersonId: chosen.id };
+            return { ...task, assignedPersonId: chosen.id, assignedBy: 'auto', updatedAt: Date.now() };
           }
           return task;
         });
 
         setSchedule(updatedSchedule);
-        showToast(`${assignedCount} Aufgaben unter Berücksichtigung von Wochentags-Balance, Pausen und Fairness zugeteilt.`, 'success');
+        showToast(`${assignedCount} Aufgaben zugeteilt – längste Pause zuerst, dann Gesamtbilanz und Wochentags-Balance.`, 'success');
       };
 
       // PDF Drucken / Exportieren
@@ -437,8 +1086,10 @@
           setLocations(INITIAL_LOCATIONS);
           setTimeSlots(INITIAL_SLOTS);
           setPatterns(INITIAL_PATTERNS);
+          setGroups(INITIAL_GROUPS);
           setPeople(INITIAL_PEOPLE);
           setSchedule([]);
+          setTombstones(normalizeTombstones(null));
           showToast('Alle Daten wurden vollständig zurückgesetzt.', 'success');
         }
       };
@@ -447,6 +1098,10 @@
 
       const handleClearAllSchedule = () => {
         if (confirm(`Möchten Sie wirklich alle generierten Termine für ${monthNameStr} löschen?`)) {
+          schedule.forEach(t => {
+            const d = parseLocalDate(t.dateStr);
+            if (d.getFullYear() === year && d.getMonth() === month) markDeleted('schedule', t.id);
+          });
           setSchedule(schedule.filter(t => {
             const d = parseLocalDate(t.dateStr);
             return !(d.getFullYear() === year && d.getMonth() === month);
@@ -461,7 +1116,7 @@
           setSchedule(schedule.map(t => {
             const d = parseLocalDate(t.dateStr);
             if (d.getFullYear() === year && d.getMonth() === month) {
-              return { ...t, assignedPersonId: null };
+              return { ...t, assignedPersonId: null, assignedBy: null, updatedAt: Date.now() };
             }
             return t;
           }));
@@ -499,9 +1154,53 @@
           showToast('Bitte Zeitslot und Ort auswählen.', 'error');
           return;
         }
-        const newPat = { id: `pat-${Date.now()}`, slotId: newPatSlot, locationId: newPatLoc, frequency: newPatFreq, weekParity: newPatFreq === 'biweekly' ? newPatParity : null };
+        const newPat = {
+          id: `pat-${Date.now()}`,
+          slotId: newPatSlot,
+          locationId: newPatLoc,
+          frequency: newPatFreq,
+          weekParity: newPatFreq === 'biweekly' ? newPatParity : null,
+          monthlyMode: newPatFreq === 'monthly' ? newPatMonthlyMode : null,
+          monthlyDay: newPatFreq === 'monthly' && newPatMonthlyMode === 'dayOfMonth' ? parseInt(newPatMonthlyDay, 10) || 1 : null,
+          monthlyWeek: newPatFreq === 'monthly' && newPatMonthlyMode === 'nthWeekday' ? (parseInt(newPatMonthlyWeek, 10) || newPatMonthlyWeek) : null,
+          monthlyWeekDay: newPatFreq === 'monthly' && newPatMonthlyMode === 'nthWeekday' ? parseInt(newPatMonthlyWeekDay, 10) : null,
+          groupIds: [...newPatGroupIds],
+          updatedAt: Date.now()
+        };
         setPatterns([...patterns, newPat]);
+        setNewPatGroupIds([]);
         showToast('Wiederkehrendes Muster angelegt.', 'success');
+      };
+
+      // Gruppe anlegen
+      const handleAddGroup = (e) => {
+        e.preventDefault();
+        const trimmed = newGroupName.trim();
+        if (!trimmed) return;
+        if (groups.some(g => g.name.toLowerCase() === trimmed.toLowerCase())) {
+          showToast('Gruppe existiert bereits!', 'error');
+          return;
+        }
+        setGroups([...groups, { id: `grp-${Date.now()}`, name: trimmed, personIds: [], updatedAt: Date.now() }]);
+        setNewGroupName('');
+        showToast('Gruppe angelegt.', 'success');
+      };
+
+      const toggleGroupMember = (groupId, personId) => {
+        setGroups(groups.map(g => g.id === groupId ? {
+          ...g,
+          personIds: g.personIds?.includes(personId) ? g.personIds.filter(id => id !== personId) : [...(g.personIds || []), personId],
+          updatedAt: Date.now()
+        } : g));
+      };
+
+      // Gruppe löschen: Referenzen in Terminen und Mustern entfernen
+      const handleDeleteGroup = (groupId) => {
+        markDeleted('groups', groupId);
+        setGroups(groups.filter(g => g.id !== groupId));
+        setSchedule(prev => prev.map(t => t.groupIds?.includes(groupId) ? { ...t, groupIds: t.groupIds.filter(x => x !== groupId), updatedAt: Date.now() } : t));
+        setPatterns(prev => prev.map(p => p.groupIds?.includes(groupId) ? { ...p, groupIds: p.groupIds.filter(x => x !== groupId) } : p));
+        showToast('Gruppe gelöscht.', 'success');
       };
 
       // Person hinzufügen
@@ -517,7 +1216,8 @@
           id: `p-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
           name: trimmed,
           absences: [],
-          matrix: {}
+          matrix: {},
+          shiftRotation: null
         };
         setPeople([...people, newPerson]);
         setNewPersonName('');
@@ -664,6 +1364,7 @@
             if (data.locations) setLocations(data.locations);
             if (data.timeSlots) setTimeSlots(data.timeSlots);
             if (data.patterns) setPatterns(data.patterns);
+            if (data.groups) setGroups(data.groups);
             if (data.people) setPeople(data.people);
             if (data.schedule) setSchedule(data.schedule);
             showToast('Backup erfolgreich importiert!', 'success');
@@ -699,34 +1400,53 @@
         const isSelected = selectedDateStr === dateStr;
         const holidayName = holidays[dateStr];
         const dayTasks = schedule.filter(t => t.dateStr === dateStr);
+        const dayGroupNames = [...new Set(dayTasks.flatMap(t => (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean)))];
+        const dayGroupInitials = dayGroupNames.map(n => getInitials(n)).join('');
 
         dayElements.push(
           h('div', {
             key: dateStr,
             onClick: () => setSelectedDateStr(dateStr),
-            className: `h-28 p-1.5 border rounded-lg cursor-pointer transition-all flex flex-col justify-between print-day-box ${
+            className: `min-h-[60px] sm:min-h-24 p-1 sm:p-1.5 border rounded-lg cursor-pointer transition-all flex flex-col justify-between min-w-0 print-day-box ${
               isSelected ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-200' : 'border-slate-200 bg-white hover:border-slate-300'
             } ${!isCurrentMonth ? 'opacity-40 bg-slate-100/50' : ''} ${holidayName ? 'bg-amber-50/40' : ''}`
           },
             h('div', { className: 'flex justify-between items-start' },
               h('span', { className: `text-xs font-bold px-1.5 py-0.5 rounded ${holidayName ? 'bg-amber-200 text-amber-900' : 'text-slate-700'}` }, dayNum),
-              holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[70px]' }, holidayName) : null
+              holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[36px] sm:max-w-[70px]' }, holidayName) : null
             ),
-            h('div', { className: 'space-y-1 overflow-y-auto max-h-16 my-1' },
+            h('div', { className: 'hidden sm:block space-y-1 my-1 min-w-0' },
               dayTasks.map(t => {
                 const loc = locations.find(l => l.id === t.locationId);
                 const slot = timeSlots.find(s => s.id === t.slotId);
                 const person = people.find(p => p.id === t.assignedPersonId);
-                return h('div', { key: t.id, className: 'text-[10px] p-1 rounded bg-slate-100 border border-slate-200 flex justify-between items-center' },
-                  h('span', { className: 'truncate font-medium' }, `${loc?.name || 'Ort'} (${slot?.time})`),
-                  h('span', { className: `px-1 py-0.2 rounded text-[9px] ${person ? 'bg-indigo-100 text-indigo-700 font-bold' : 'bg-rose-100 text-rose-700 font-bold'}` }, person ? person.name : 'Offen')
+                const taskGroupNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
+                return h('div', { key: t.id, className: `p-1 rounded border flex items-center gap-1 min-w-0 ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300'}` },
+                  taskGroupNames.length > 0 ? h('span', { title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-indigo-600 text-white rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, getInitials(taskGroupNames[0])) : null,
+                  h('span', { className: 'text-[9px] font-bold opacity-90 shrink-0' }, slot?.time || ''),
+                  h('div', { className: 'min-w-0 flex-1 leading-tight' },
+                    h('span', { className: 'text-[11px] font-bold truncate block' }, person ? person.name : 'Offen'),
+                    h('span', { className: 'text-[9px] opacity-80 truncate block' }, loc?.name || 'Ort')
+                  )
                 );
               })
             ),
-            h('button', {
-              onClick: (e) => { e.stopPropagation(); setSelectedDateStr(dateStr); },
-              className: 'text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold text-center w-full py-0.5 bg-indigo-50 hover:bg-indigo-100 rounded no-print'
-            }, '+ Aufgabe')
+            dayTasks.length > 0 ? h('div', { className: 'sm:hidden my-1 space-y-1 min-w-0' },
+              dayTasks.map(t => {
+                const loc = locations.find(l => l.id === t.locationId);
+                const slot = timeSlots.find(s => s.id === t.slotId);
+                const person = people.find(p => p.id === t.assignedPersonId);
+                return h('div', {
+                  key: t.id,
+                  title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : 'Offen',
+                  className: `px-0.5 py-0.5 rounded border text-center leading-none ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300 text-rose-700'}`
+                },
+                  h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : 'Offen'),
+                  slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null,
+                  (t.groupIds || []).length > 0 ? h('div', { className: 'text-[7px] font-bold text-indigo-700 mt-0.5' }, dayGroupInitials) : null
+                );
+              })
+            ) : null
           )
         );
 
@@ -737,33 +1457,107 @@
       const selectedDayOfWeek = parseLocalDate(selectedDateStr).getDay();
       const validSlotsForSelectedDay = timeSlots.filter(s => s.dayOfWeek === selectedDayOfWeek);
 
+      const syncConnected = sync?.status === 'connected';
+      const syncPending = sync?.status === 'waiting' || sync?.status === 'connecting';
+
       return h('div', { className: 'min-h-screen pb-12' },
         // Header
-        h('header', { className: 'bg-white border-b border-slate-200 px-6 py-4 shadow-sm flex flex-wrap justify-between items-center gap-4' },
+        h('header', { className: 'bg-white border-b border-slate-200 px-3 sm:px-6 py-4 shadow-sm flex flex-wrap justify-between items-center gap-2 sm:gap-4' },
           h('div', null,
-            h('h1', { className: 'text-xl font-bold text-slate-900 flex items-center gap-2' }, '🗓️ Monats- & Wochenplaner (Sachsen)'),
+            h('h1', { className: 'text-xl font-bold text-slate-900 flex items-center gap-2' }, '🗓️ Monats- & Wochenplaner',
+            h('span', { className: 'text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded no-print' }, `v${APP_VERSION}`)),
             h('p', { className: 'text-xs text-slate-500' }, 'Automatische gerechte Aufgabenverteilung & Feiertagsunterstützung')
           ),
-          h('nav', { className: 'flex bg-slate-100 p-1 rounded-lg gap-1 text-sm font-medium no-print' },
-            h('button', { onClick: () => setActiveTab('calendar'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'calendar' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '📅 Planer & Kalender'),
-            h('button', { onClick: () => setActiveTab('people'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'people' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '👥 Personen & Matrix'),
-            h('button', { onClick: () => setActiveTab('patterns'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'patterns' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '🔄 Wiederkehrende Muster'),
-            h('button', { onClick: () => setActiveTab('stats'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'stats' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '📊 Statistik'),
-            h('button', { onClick: () => setActiveTab('settings'), className: `px-3 py-1.5 rounded-md transition-all ${activeTab === 'settings' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '⚙️ Stammdaten & Export')
-          )
+          h('nav', { className: 'flex bg-slate-100 p-1 rounded-lg gap-1 text-sm font-medium no-print overflow-x-auto whitespace-nowrap max-w-full' },
+            h('button', { onClick: () => setActiveTab('calendar'), className: `px-3 py-1.5 rounded-md transition-all shrink-0 ${activeTab === 'calendar' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '📅 Planer & Kalender'),
+            h('button', { onClick: () => setActiveTab('people'), className: `px-3 py-1.5 rounded-md transition-all shrink-0 ${activeTab === 'people' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '👥 Personen & Matrix'),
+            h('button', { onClick: () => setActiveTab('patterns'), className: `px-3 py-1.5 rounded-md transition-all shrink-0 ${activeTab === 'patterns' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '🔄 Wiederkehrende Muster'),
+            h('button', { onClick: () => setActiveTab('stats'), className: `px-3 py-1.5 rounded-md transition-all shrink-0 ${activeTab === 'stats' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '📊 Statistik'),
+            h('button', { onClick: () => setActiveTab('settings'), className: `px-3 py-1.5 rounded-md transition-all shrink-0 ${activeTab === 'settings' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-slate-600'}` }, '⚙️ Stammdaten & Export')
+          ),
+          h('button', { onClick: () => setSyncOpen(true), className: `px-3 py-1.5 text-white text-sm font-medium rounded-lg no-print ${syncConnected ? 'bg-emerald-600 hover:bg-emerald-700' : syncPending ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-900'}` }, syncConnected ? '🟢 Sync aktiv' : syncPending ? '🟡 Sync verbindet…' : '🔄 Geräte-Sync')
         ),
+
+        updateAvailable ? h('div', { className: 'fixed top-0 left-0 right-0 z-50 bg-amber-500 text-white text-sm font-semibold px-4 py-2 flex flex-wrap justify-center items-center gap-3 shadow-lg no-print' },
+          '🔄 Eine neue Version ist verfügbar – bitte aktualisieren.',
+          h('button', { onClick: () => location.reload(), className: 'px-3 py-1 bg-white text-amber-700 rounded font-bold text-xs hover:bg-amber-50' }, 'Jetzt aktualisieren')
+        ) : null,
+
+        syncOpen ? h('div', { className: 'fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4 no-print', onClick: closeSyncModal },
+          h('div', { className: 'bg-white rounded-xl shadow-xl max-w-md w-full p-4 sm:p-6 space-y-4', onClick: (e) => e.stopPropagation() },
+            h('div', { className: 'flex justify-between items-center' },
+              h('h2', { className: 'text-lg font-bold text-slate-900' }, '🔄 Geräte-Sync'),
+              h('button', { onClick: closeSyncModal, className: 'text-slate-400 hover:text-slate-600 text-xl font-bold' }, '✕')
+            ),
+            h('p', { className: 'text-xs text-slate-500' }, 'Orte, Zeitslots, Muster, Personen, Abwesenheiten und Termine werden direkt Gerät-zu-Gerät übertragen (peer-to-peer, kein Server speichert die Daten).'),
+
+            sync && sync.status === 'waiting' ? h('div', { className: 'p-4 rounded-lg bg-indigo-50 border border-indigo-200 space-y-3 text-center' },
+              h('p', { className: 'text-xs font-semibold text-indigo-700' }, 'Warte auf das zweite Gerät…'),
+              h('div', { ref: qrRef, className: 'flex justify-center' }),
+              h('div', { className: 'text-2xl font-mono font-bold tracking-[0.3em] text-slate-800' }, sync.code),
+              h('div', { className: 'text-[10px] font-mono text-slate-500 break-all select-all' }, syncKeyOf(sync.code, sync.token)),
+              h('button', { onClick: copySyncCode, className: 'w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg' }, '📋 Schlüssel kopieren'),
+              h('p', { className: 'text-[10px] text-slate-500' }, 'Auf dem zweiten Gerät „Mit Code verbinden“ wählen und den vollständigen Schlüssel (Code.Schlüssel) per QR-Scan, Einfügen oder Abtippen übertragen. Den Schlüssel nur mit dem eigenen zweiten Gerät teilen – er berechtigt zum Datenabgleich.')
+            ) : null,
+
+            sync && sync.status === 'connecting' ? h('div', { className: 'p-3 rounded-lg bg-indigo-50 border border-indigo-200 text-xs font-semibold text-indigo-700 text-center' }, `Verbinde mit Code ${sync.code}…${reconnectAttemptsRef.current > 1 ? ` (Versuch ${reconnectAttemptsRef.current})` : ''}`) : null,
+            sync && sync.status === 'connected' ? h('div', { className: 'p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 text-center' }, '✅ Verbunden – Änderungen werden automatisch in beide Richtungen synchronisiert. Die Kopplung bleibt dauerhaft bestehen, auch nach dem Schließen oder Neuladen der App.') : null,
+            sync && sync.status === 'closed' ? h('div', { className: 'p-3 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600 text-center' }, 'Verbindung getrennt – es wird automatisch wieder verbunden, sobald das andere Gerät erreichbar ist.') : null,
+            sync && sync.status === 'error' ? h('div', { className: 'p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 text-center' }, sync.message || 'Verbindungsfehler.') : null,
+
+            (!sync || sync.status === 'closed' || sync.status === 'error') ? h('div', { className: 'space-y-4' },
+              h('div', { className: 'space-y-2' },
+                h('h3', { className: 'text-sm font-bold text-slate-800' }, '1. Dieses Gerät: Sync starten'),
+                h('button', { onClick: startSyncHost, className: 'w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg' }, 'Sync starten (Code erzeugen)')
+              ),
+              h('div', { className: 'space-y-2' },
+                h('h3', { className: 'text-sm font-bold text-slate-800' }, '2. Zweites Gerät: Mit Code verbinden'),
+                h('form', { onSubmit: connectSyncAsClient, className: 'flex gap-2' },
+                  h('input', {
+                    type: 'text',
+                    maxLength: 90,
+                    placeholder: '12345678.schlüssel',
+                    value: syncCodeInput,
+                    onChange: (e) => setSyncCodeInput(e.target.value.replace(/[^a-zA-Z0-9.\-:_ ]/g, '').slice(0, 90)),
+                    className: 'flex-1 text-sm p-2 border rounded-lg font-mono bg-white border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500'
+                  }),
+                  h('button', { type: 'submit', className: 'bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-4 rounded-lg' }, 'Verbinden')
+                ),
+                h('button', { onClick: pasteSyncCode, className: 'text-xs text-indigo-600 hover:underline font-semibold' }, '📋 Schlüssel aus Zwischenablage einfügen')
+              ),
+              h('p', { className: 'text-[10px] text-slate-500' }, 'Die Kopplung wird dauerhaft gespeichert: Beim nächsten Öffnen der App verbindet sich dieses Gerät automatisch wieder und synchronisiert im Hintergrund.')
+            ) : null,
+
+            sync && sync.status !== 'closed' && sync.status !== 'error' ? h('button', { onClick: disconnectSync, className: 'w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg' }, '🔌 Verbindung trennen (Kopplung löschen)') : null,
+
+            h('div', { className: 'space-y-2 pt-2 border-t border-slate-100' },
+              h('div', { className: 'flex justify-between items-center' },
+                h('h3', { className: 'text-sm font-bold text-slate-800' }, '📜 Sync-Protokoll'),
+                syncLog.length > 0 ? h('button', { onClick: () => setSyncLog([]), className: 'text-[10px] text-rose-500 hover:underline font-semibold' }, 'Protokoll löschen') : null
+              ),
+              h('div', { className: 'max-h-44 overflow-y-auto space-y-0.5 bg-slate-50 border border-slate-200 rounded-lg p-2' },
+                syncLog.length === 0 ? h('p', { className: 'text-[10px] text-slate-400 italic' }, 'Noch keine Einträge – das Protokoll wird automatisch im Hintergrund geführt.') :
+                [...syncLog].reverse().map((entry, idx) => h('div', { key: `${entry.time}-${idx}`, className: 'text-[10px] flex gap-2 items-start' },
+                  h('span', { className: 'text-slate-400 font-mono shrink-0' }, entry.time),
+                  h('span', { className: `shrink-0 font-bold ${entry.direction === 'gesendet' ? 'text-sky-600' : entry.direction === 'empfangen' ? 'text-emerald-600' : 'text-slate-400'}` }, entry.direction === 'gesendet' ? '↑' : entry.direction === 'empfangen' ? '↓' : '•'),
+                  h('span', { className: 'text-slate-700' }, entry.text)
+                ))
+              )
+            )
+          )
+        ) : null,
 
         toast ? h('div', { className: `fixed bottom-4 right-4 z-50 px-4 py-2.5 rounded-lg shadow-lg text-white font-medium text-sm ${toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}` }, toast.msg) : null,
 
-        h('main', { className: 'max-w-7xl mx-auto px-6 mt-6 print-container' },
+        h('main', { className: 'max-w-7xl mx-auto px-3 sm:px-6 mt-4 sm:mt-6 print-container' },
           activeTab === 'calendar' ? h('div', { className: 'space-y-6' },
             h('div', { className: 'bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4 no-print' },
               h('div', { className: 'flex items-center gap-3' },
                 h('button', { onClick: () => setCurrentDate(new Date(year, month - 1, 1)), className: 'p-2 border rounded-lg font-bold' }, '‹'),
-                h('h2', { className: 'text-lg font-bold text-slate-800 w-44 text-center' }, currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })),
+                h('h2', { className: 'text-lg font-bold text-slate-800 w-36 sm:w-44 text-center' }, currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })),
                 h('button', { onClick: () => setCurrentDate(new Date(year, month + 1, 1)), className: 'p-2 border rounded-lg font-bold' }, '›')
               ),
-              h('div', { className: 'flex flex-wrap gap-3 items-center' },
+              h('div', { className: 'flex flex-wrap gap-2 items-center' },
                 h('button', { onClick: generateDates, className: 'px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm' }, '1. Termine generieren (vollst. KW)'),
                 h('button', { onClick: assignPeople, className: 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm' }, '2. Personen zuteilen'),
                 h('button', { onClick: handleClearAllAssignments, className: 'px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm' }, '🧹 Zuteilungen zurücksetzen (Monat)'),
@@ -775,7 +1569,7 @@
             // Druckkopf für PDF Export
             h('div', { className: 'hidden print:block text-center mb-4' },
               h('h2', { className: 'text-xl font-bold' }, `Monatsplan: ${currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}`),
-              h('p', { className: 'text-xs text-slate-500' }, 'Erstellt mit Monats- & Wochenplaner (Sachsen)')
+              h('p', { className: 'text-xs text-slate-500' }, 'Erstellt mit Monats- & Wochenplaner')
             ),
 
             h('div', { className: 'grid grid-cols-1 lg:grid-cols-4 gap-6' },
@@ -804,15 +1598,31 @@
                         h('div', { className: 'font-bold text-xs text-slate-900' }, loc?.name || 'Ort'),
                         h('div', { className: 'flex items-center gap-2' },
                           h('button', { onClick: () => setEditingTask(isEditingThis ? null : task), className: 'text-indigo-600 text-xs font-semibold hover:underline' }, isEditingThis ? '✕ Abbrechen' : '✏️ Ändern'),
-                          h('button', { onClick: () => setSchedule(schedule.filter(t => t.id !== task.id)), className: 'text-rose-500 text-xs' }, 'Entfernen')
+                          h('button', { onClick: () => { markDeleted('schedule', task.id); setSchedule(schedule.filter(t => t.id !== task.id)); }, className: 'text-rose-500 text-xs' }, 'Entfernen')
                         )
                       ),
+                      groups.length > 0 ? h('div', { className: 'flex flex-wrap gap-1 items-center' },
+                        h('span', { className: 'text-[9px] font-bold text-slate-400' }, 'Gruppen:'),
+                        groups.map(g => {
+                          const isRelevant = (task.groupIds || []).includes(g.id);
+                          return h('button', {
+                            key: g.id, type: 'button',
+                            onClick: () => setSchedule(schedule.map(t => t.id === task.id ? {
+                              ...t,
+                              groupIds: isRelevant ? (t.groupIds || []).filter(x => x !== g.id) : [...(t.groupIds || []), g.id],
+                              updatedAt: Date.now()
+                            } : t)),
+                            className: `px-1.5 py-0.5 rounded-full border text-[9px] font-semibold ${isRelevant ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-500 border-slate-300 hover:border-indigo-300'}`,
+                            title: isRelevant ? `Gruppe "${g.name}" entfernen` : `Gruppe "${g.name}" hinzufügen`
+                          }, `${isRelevant ? '✓ ' : ''}${g.name}`);
+                        })
+                      ) : null,
                       isEditingThis ? h('form', {
                         onSubmit: (e) => {
                           e.preventDefault();
                           const slotId = e.target.elements.slotId.value;
                           const locationId = e.target.elements.locationId.value;
-                          setSchedule(schedule.map(t => t.id === task.id ? { ...t, slotId, locationId } : t));
+                          setSchedule(schedule.map(t => t.id === task.id ? { ...t, slotId, locationId, updatedAt: Date.now() } : t));
                           setEditingTask(null);
                           showToast('Aufgabe aktualisiert!', 'success');
                         },
@@ -836,23 +1646,33 @@
                         const recId = getRecommendedPersonIdForTask(task);
                         const recPerson = people.find(p => p.id === recId);
                         return h('div', { className: 'space-y-1' },
-                          recPerson ? h('div', { className: 'text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded flex items-center gap-1' },
+                          recPerson ? h('button', {
+                            onClick: () => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: recPerson.id, assignedBy: 'manual', updatedAt: Date.now() } : t)),
+                            className: 'text-[10px] text-indigo-700 font-bold bg-indigo-100 hover:bg-indigo-200 px-1.5 py-0.5 rounded flex items-center gap-1',
+                            title: 'Klicken, um die Empfehlung zuzuteilen'
+                          },
                             h('span', null, '⭐ Empfehlung:'),
                             h('span', { className: 'underline' }, recPerson.name)
                           ) : null,
-                          h('select', {
-                            value: task.assignedPersonId || '',
-                            onChange: (e) => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: e.target.value || null } : t)),
-                            className: 'w-full text-xs p-1 border rounded bg-white font-semibold'
-                          },
-                            h('option', { value: '' }, '-- Unbesetzt --'),
+                          h('div', { className: 'space-y-0.5' },
                             [...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(p => {
-                              const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
+                              const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr, task.groupIds);
+                              const isAssigned = task.assignedPersonId === p.id;
                               const isRec = p.id === recId;
-                              return h('option', { key: p.id, value: p.id, disabled: !details.isAvailable }, `${p.name} ${isRec ? '⭐ [Empfohlen]' : ''} ${!details.isAvailable ? `(${details.reason})` : ''}`);
+                              return h('div', { key: p.id, className: 'flex justify-between items-center gap-2 text-[10px]' },
+                                h('button', {
+                                  onClick: details.isAvailable ? () => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: isAssigned ? null : p.id, assignedBy: isAssigned ? null : 'manual', updatedAt: Date.now() } : t)) : undefined,
+                                  disabled: !details.isAvailable,
+                                  className: `px-1.5 py-0.5 rounded border font-bold truncate max-w-[60%] text-left ${!details.isAvailable ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed' : isAssigned ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-indigo-50 hover:border-indigo-300'}`,
+                                  title: !details.isAvailable ? details.reason : (isAssigned ? 'Klicken, um Zuteilung zu entfernen' : 'Klicken, um diese Person zuzuteilen')
+                                },
+                                  `${isAssigned ? '✓ ' : ''}${isRec && !isAssigned ? '⭐ ' : ''}${p.name}`
+                                ),
+                                h('span', { className: `truncate text-right ${details.isAvailable ? 'text-emerald-600' : 'text-rose-500 font-medium'}` }, details.isAvailable ? 'verfügbar' : details.reason)
+                              );
                             })
                           )
-                        );
+                      );
                       })()
                     );
                   })
@@ -872,21 +1692,34 @@
                         dateStr: selectedDateStr,
                         slotId,
                         locationId,
+                        groupIds: [...newTaskGroupIds],
                         assignedPersonId: null,
-                        isManual: true
+                        isManual: true,
+                        updatedAt: Date.now()
                       }]);
+                      setNewTaskGroupIds([]);
                       showToast('Manuelle Aufgabe angelegt', 'success');
                     }
                   },
                   className: 'w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 flex items-center justify-center gap-1'
-                }, '+ Aufgabe anlegen')
+                }, '+ Aufgabe anlegen'),
+                groups.length > 0 ? h('div', { className: 'space-y-1' },
+                  h('label', { className: 'text-[10px] font-bold text-slate-500 block' }, 'Relevante Gruppen für neue Aufgabe (optional)'),
+                  h('div', { className: 'flex flex-wrap gap-1' },
+                    groups.map(g => h('button', {
+                      key: g.id, type: 'button',
+                      onClick: () => setNewTaskGroupIds(newTaskGroupIds.includes(g.id) ? newTaskGroupIds.filter(id => id !== g.id) : [...newTaskGroupIds, g.id]),
+                      className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold ${newTaskGroupIds.includes(g.id) ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300'}`
+                    }, g.name))
+                  )
+                ) : null
               )
             )
           ) : activeTab === 'people' ? h('div', { className: 'space-y-6' },
             h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4' },
               h('div', null,
                 h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Personen & Qualifikations-Matrix'),
-                h('p', { className: 'text-xs text-slate-500' }, 'Verwalten Sie Personen, Qualifikationen und tragen Sie Abwesenheiten ein.')
+                h('p', { className: 'text-xs text-slate-500' }, 'Verwalten Sie Personen, Qualifikationen, externe Schichtrhythmen (3-Schicht-System) und Abwesenheiten.')
               ),
               h('div', { className: 'flex flex-wrap items-center gap-3' },
                 h('form', { onSubmit: handleAddPerson, className: 'flex items-center gap-2' },
@@ -949,7 +1782,95 @@
                   h('div', { className: 'space-y-3' },
                     h('div', { className: 'font-bold text-sm text-slate-800 flex justify-between items-center' },
                       h('span', null, p.name),
-                      h('button', { onClick: () => setPeople(people.filter(person => person.id !== p.id)), className: 'text-rose-500 text-xs font-normal hover:underline' }, 'Löschen')
+                      h('button', { onClick: () => { (p.absences || []).forEach(abs => markDeleted('absences', abs.id)); markDeleted('people', p.id); setPeople(people.filter(person => person.id !== p.id)); }, className: 'text-rose-500 text-xs font-normal hover:underline' }, 'Löschen')
+                    ),
+
+                    // Externes Schichtsystem (Rotation)
+                    h('div', { className: 'space-y-1.5 pt-1 border-t border-slate-100' },
+                      h('span', { className: 'text-[10px] font-bold text-slate-400 uppercase' }, 'Externes Schichtsystem (Rotation)'),
+                      h('select', {
+                        value: p.shiftRotation?.enabled ? 'worker' : 'none',
+                        onChange: (e) => {
+                          const mode = e.target.value;
+                          setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => person.id === p.id
+                            ? { ...person, shiftRotation: mode === 'worker' ? { enabled: true, startDate: toLocalDateStr(new Date()), cycle: [...DEFAULT_SHIFT_CYCLE] } : null }
+                            : person));
+                          showToast(mode === 'worker' ? 'Schichtrhythmus aktiv – Startdatum und Reihenfolge anpassen.' : 'Schichtrhythmus entfernt.', 'success');
+                        },
+                        className: 'w-full text-xs p-1.5 border rounded bg-white border-slate-300'
+                      },
+                        h('option', { value: 'none' }, 'Kein Schichtsystem'),
+                        h('option', { value: 'worker' }, 'Arbeitet extern im Schichtsystem')
+                      ),
+                      p.shiftRotation?.enabled ? h('div', { className: 'space-y-2' },
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-0.5' }, 'Start des Rhythmus (Tag 1 = erste Kachel)'),
+                          h('input', {
+                            type: 'date',
+                            value: p.shiftRotation.startDate || '',
+                            onChange: (e) => {
+                              const val = e.target.value;
+                              setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => person.id === p.id ? { ...person, shiftRotation: { ...person.shiftRotation, startDate: val } } : person));
+                            },
+                            className: 'w-full text-[11px] p-1 border rounded bg-white border-slate-300'
+                          })
+                        ),
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-0.5' }, 'Rhythmus (Kachel antippen: Frei → Früh → Spät → Nacht)'),
+                          h('div', { className: 'flex flex-wrap items-center gap-1' },
+                            p.shiftRotation.cycle.map((dayShift, idx) => {
+                              const def = SHIFT_DEFS[dayShift] || SHIFT_DEFS.frei;
+                              return h('button', {
+                                key: idx,
+                                title: `Tag ${idx + 1}: ${def.label}`,
+                                onClick: () => {
+                                  const nextShift = SHIFT_CYCLE_ORDER[(SHIFT_CYCLE_ORDER.indexOf(dayShift) + 1) % SHIFT_CYCLE_ORDER.length];
+                                  setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => {
+                                    if (person.id !== p.id) return person;
+                                    const cycle = [...person.shiftRotation.cycle];
+                                    cycle[idx] = nextShift;
+                                    return { ...person, shiftRotation: { ...person.shiftRotation, cycle } };
+                                  }));
+                                },
+                                className: `w-8 h-8 text-[10px] font-bold rounded border ${def.color}`
+                              }, def.short);
+                            }),
+                            h('button', {
+                              onClick: () => {
+                                setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => person.id === p.id ? { ...person, shiftRotation: { ...person.shiftRotation, cycle: [...person.shiftRotation.cycle, 'frei'] } } : person));
+                              },
+                              title: 'Tag hinzufügen',
+                              className: 'w-8 h-8 text-xs font-bold rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                            }, '+'),
+                            p.shiftRotation.cycle.length > 1 ? h('button', {
+                              onClick: () => {
+                                setPeople([...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(person => person.id === p.id ? { ...person, shiftRotation: { ...person.shiftRotation, cycle: person.shiftRotation.cycle.slice(0, -1) } } : person));
+                              },
+                              title: 'Letzten Tag entfernen',
+                              className: 'w-8 h-8 text-xs font-bold rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-100'
+                            }, '−') : null
+                          )
+                        ),
+                        h('p', { className: 'text-[9px] text-slate-400 leading-snug' },
+                          'Blockiert: Früh 06–14 Uhr · Spät 14–22 Uhr · Nacht 22–06 Uhr und am Folgetag bis 14 Uhr'
+                        ),
+                        p.shiftRotation.startDate ? (() => {
+                          const chips = [];
+                          const today = new Date();
+                          for (let i = 0; i < 7; i++) {
+                            const d = new Date(today);
+                            d.setDate(d.getDate() + i);
+                            const ds = toLocalDateStr(d);
+                            const shift = getExternalShiftForDate({ shiftRotation: p.shiftRotation }, ds);
+                            const def = SHIFT_DEFS[shift || 'frei'];
+                            chips.push(h('span', { key: ds, className: `px-1 py-0.5 rounded border text-[9px] font-semibold ${def.color}` }, `${d.toLocaleDateString('de-DE', { weekday: 'short' })} ${def.short}`));
+                          }
+                          return h('div', { className: 'flex flex-wrap gap-1 items-center' },
+                            h('span', { className: 'text-[9px] text-slate-400' }, 'Nächste 7 Tage:'),
+                            chips
+                          );
+                        })() : null
+                      ) : null
                     ),
 
                     // Abwesenheits-Liste
@@ -1009,7 +1930,7 @@
                               title: 'Bearbeiten'
                             }, '✏️'),
                             h('button', {
-                              onClick: () => setPeople([...people].sort((x, y) => x.name.localeCompare(y.name, 'de')).map(person => person.id === p.id ? { ...person, absences: person.absences.filter(abs => abs.id !== a.id) } : person)),
+                              onClick: () => { markDeleted('absences', a.id); setPeople([...people].sort((x, y) => x.name.localeCompare(y.name, 'de')).map(person => person.id === p.id ? { ...person, absences: person.absences.filter(abs => abs.id !== a.id) } : person)); },
                               className: 'text-rose-500 font-bold',
                               title: 'Löschen'
                             }, '✕')
@@ -1078,7 +1999,8 @@
                     className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
                   },
                     h('option', { value: 'weekly' }, 'Wöchentlich'),
-                    h('option', { value: 'biweekly' }, 'Alle 2 Wochen')
+                    h('option', { value: 'biweekly' }, 'Alle 2 Wochen'),
+                    h('option', { value: 'monthly' }, 'Monatlich')
                   )
                 ),
                 newPatFreq === 'biweekly' ? h('div', null,
@@ -1092,6 +2014,57 @@
                     h('option', { value: 'odd' }, 'Nur in ungeraden Wochen (KW 1, 3, 5...)')
                   )
                 ) : null,
+                newPatFreq === 'monthly' ? h('div', null,
+                  h('label', { className: 'text-xs font-bold text-slate-500 block mb-1' }, 'Monatlicher Rhythmus'),
+                  h('select', {
+                    value: newPatMonthlyMode,
+                    onChange: (e) => setNewPatMonthlyMode(e.target.value),
+                    className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
+                  },
+                    h('option', { value: 'dayOfMonth' }, 'Am gleichen Tag des Monats'),
+                    h('option', { value: 'nthWeekday' }, 'Am x. Wochentag im Monat')
+                  )
+                ) : null,
+                newPatFreq === 'monthly' && newPatMonthlyMode === 'dayOfMonth' ? h('div', null,
+                  h('label', { className: 'text-xs font-bold text-slate-500 block mb-1' }, 'Tag im Monat'),
+                  h('input', {
+                    type: 'number', min: 1, max: 31,
+                    value: newPatMonthlyDay,
+                    onChange: (e) => setNewPatMonthlyDay(e.target.value),
+                    className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
+                  })
+                ) : null,
+                newPatFreq === 'monthly' && newPatMonthlyMode === 'nthWeekday' ? h('div', null,
+                  h('label', { className: 'text-xs font-bold text-slate-500 block mb-1' }, 'Wiederholung im Monat'),
+                  h('div', { className: 'flex gap-2' },
+                    h('select', {
+                      value: newPatMonthlyWeek,
+                      onChange: (e) => setNewPatMonthlyWeek(e.target.value),
+                      className: 'w-1/2 text-xs p-2 border rounded-lg bg-white border-slate-300'
+                    },
+                      h('option', { value: '1' }, '1.'), h('option', { value: '2' }, '2.'),
+                      h('option', { value: '3' }, '3.'), h('option', { value: '4' }, '4.'),
+                      h('option', { value: 'last' }, 'letzter')
+                    ),
+                    h('select', {
+                      value: newPatMonthlyWeekDay,
+                      onChange: (e) => setNewPatMonthlyWeekDay(e.target.value),
+                      className: 'w-1/2 text-xs p-2 border rounded-lg bg-white border-slate-300'
+                    },
+                      DAY_NAMES.map((d, idx) => h('option', { key: idx, value: idx }, d))
+                    )
+                  )
+                ) : null,
+                groups.length > 0 ? h('div', { className: 'md:col-span-4' },
+                  h('label', { className: 'text-xs font-bold text-slate-500 block mb-1' }, 'Relevante Gruppen (optional – leer = für alle)'),
+                  h('div', { className: 'flex flex-wrap gap-1' },
+                    groups.map(g => h('button', {
+                      key: g.id, type: 'button',
+                      onClick: () => setNewPatGroupIds(newPatGroupIds.includes(g.id) ? newPatGroupIds.filter(id => id !== g.id) : [...newPatGroupIds, g.id]),
+                      className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold ${newPatGroupIds.includes(g.id) ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300'}`
+                    }, g.name))
+                  )
+                ) : null,
                 h('button', { type: 'submit', className: 'bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold p-2.5 rounded-lg' }, '+ Muster speichern')
               )
             ),
@@ -1103,7 +2076,12 @@
                 patterns.map(pat => {
                   const slot = timeSlots.find(s => s.id === pat.slotId);
                   const loc = locations.find(l => l.id === pat.locationId);
-                  const freqText = pat.frequency === 'weekly' ? 'Wöchentlich' : (pat.weekParity === 'odd' ? 'Alle 2 Wochen (ungerade KW)' : 'Alle 2 Wochen (gerade KW)');
+                  const freqText = pat.frequency === 'weekly' ? 'Wöchentlich'
+                    : pat.frequency === 'monthly' ? (pat.monthlyMode === 'nthWeekday'
+                      ? `Monatlich am ${pat.monthlyWeek === 'last' ? 'letzten' : pat.monthlyWeek + '.'} ${DAY_NAMES[pat.monthlyWeekDay] || ''}`
+                      : `Monatlich am ${pat.monthlyDay || 1}.`)
+                    : (pat.weekParity === 'odd' ? 'Alle 2 Wochen (ungerade KW)' : 'Alle 2 Wochen (gerade KW)');
+                  const patGroups = (pat.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
                   const isEditingThis = editingPattern?.id === pat.id;
 
                   return h('div', { key: pat.id, className: 'p-3 border rounded-lg bg-slate-50 space-y-2 text-sm' },
@@ -1118,11 +2096,15 @@
                             setEditingPattern(null);
                           } else {
                             setEditingPattern(pat);
+                            setEditPatGroupIds([...(pat.groupIds || [])]);
                           }
                         }, className: 'text-indigo-600 font-semibold text-xs hover:underline' }, isEditingThis ? '✕ Abbrechen' : '✏️ Bearbeiten'),
-                        h('button', { onClick: () => setPatterns(patterns.filter(p => p.id !== pat.id)), className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
+                        h('button', { onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
                       )
                     ),
+                    patGroups.length > 0 ? h('div', { className: 'flex flex-wrap gap-1' },
+                      patGroups.map(gn => h('span', { key: gn, className: 'px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-semibold' }, gn))
+                    ) : null,
                     isEditingThis ? h('form', {
                       onSubmit: (e) => {
                         e.preventDefault();
@@ -1130,8 +2112,12 @@
                         const locationId = e.target.elements.editLoc.value;
                         const frequency = e.target.elements.editFreq.value;
                         const weekParity = frequency === 'biweekly' ? e.target.elements.editParity.value : null;
-
-                        setPatterns(patterns.map(p => p.id === pat.id ? { ...p, slotId, locationId, frequency, weekParity } : p));
+                        const monthlyMode = frequency === 'monthly' ? e.target.elements.editMonthlyMode.value : null;
+                        const monthlyDay = frequency === 'monthly' && monthlyMode === 'dayOfMonth' ? parseInt(e.target.elements.editMonthlyDay.value, 10) || 1 : null;
+                        const monthlyWeekRaw = frequency === 'monthly' && monthlyMode === 'nthWeekday' ? e.target.elements.editMonthlyWeek.value : null;
+                        const monthlyWeek = monthlyWeekRaw ? (parseInt(monthlyWeekRaw, 10) || monthlyWeekRaw) : null;
+                        const monthlyWeekDay = frequency === 'monthly' && monthlyMode === 'nthWeekday' ? parseInt(e.target.elements.editMonthlyWeekDay.value, 10) : null;
+                        setPatterns(patterns.map(p => p.id === pat.id ? { ...p, slotId, locationId, frequency, weekParity, monthlyMode, monthlyDay, monthlyWeek, monthlyWeekDay, groupIds: [...editPatGroupIds], updatedAt: Date.now() } : p));
                         setEditingPattern(null);
                         showToast('Muster erfolgreich aktualisiert!', 'success');
                       },
@@ -1161,20 +2147,55 @@
                             className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
                           },
                             h('option', { value: 'weekly' }, 'Wöchentlich'),
-                            h('option', { value: 'biweekly' }, 'Alle 2 Wochen')
+                            h('option', { value: 'biweekly' }, 'Alle 2 Wochen'),
+                            h('option', { value: 'monthly' }, 'Monatlich')
                           )
                         )
                       ),
-                      h('div', { className: 'flex gap-2 items-center pt-1' },
-                        h('div', { className: 'flex-1' },
+                      h('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' },
+                        h('div', null,
                           h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Wochen-Rhythmus (bei 2-wöchentlich)'),
                           h('select', { name: 'editParity', defaultValue: pat.weekParity || 'even', className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' },
                             h('option', { value: 'even' }, 'Nur in geraden Wochen (KW 2, 4, 6...)'),
                             h('option', { value: 'odd' }, 'Nur in ungeraden Wochen (KW 1, 3, 5...)')
                           )
                         ),
-                        h('button', { type: 'submit', className: 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg self-end' }, 'Speichern')
-                      )
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Monatlicher Rhythmus (bei monatlich)'),
+                          h('select', { name: 'editMonthlyMode', defaultValue: pat.monthlyMode || 'dayOfMonth', className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' },
+                            h('option', { value: 'dayOfMonth' }, 'Am gleichen Tag des Monats'),
+                            h('option', { value: 'nthWeekday' }, 'Am x. Wochentag im Monat')
+                          )
+                        ),
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Tag im Monat (bei Tag des Monats)'),
+                          h('input', { name: 'editMonthlyDay', type: 'number', min: 1, max: 31, defaultValue: pat.monthlyDay || 1, className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' })
+                        ),
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Wiederholung im Monat (bei x. Wochentag)'),
+                          h('div', { className: 'flex gap-2' },
+                            h('select', { name: 'editMonthlyWeek', defaultValue: pat.monthlyWeek || '1', className: 'w-1/2 text-xs p-2 border rounded-lg bg-white border-slate-300' },
+                              h('option', { value: '1' }, '1.'), h('option', { value: '2' }, '2.'),
+                              h('option', { value: '3' }, '3.'), h('option', { value: '4' }, '4.'),
+                              h('option', { value: 'last' }, 'letzter')
+                            ),
+                            h('select', { name: 'editMonthlyWeekDay', defaultValue: pat.monthlyWeekDay ?? 1, className: 'w-1/2 text-xs p-2 border rounded-lg bg-white border-slate-300' },
+                              DAY_NAMES.map((d, idx) => h('option', { key: idx, value: idx }, d))
+                            )
+                          )
+                        )
+                      ),
+                      groups.length > 0 ? h('div', null,
+                        h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Relevante Gruppen (optional – leer = für alle)'),
+                        h('div', { className: 'flex flex-wrap gap-1' },
+                          groups.map(g => h('button', {
+                            key: g.id, type: 'button',
+                            onClick: () => setEditPatGroupIds(editPatGroupIds.includes(g.id) ? editPatGroupIds.filter(id => id !== g.id) : [...editPatGroupIds, g.id]),
+                            className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold ${editPatGroupIds.includes(g.id) ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300'}`
+                          }, `${editPatGroupIds.includes(g.id) ? '✓ ' : ''}${g.name}`))
+                        )
+                      ) : null,
+                      h('button', { type: 'submit', className: 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg self-end' }, 'Speichern')
                     ) : null
                   );
                 })
@@ -1235,7 +2256,7 @@
                 h('div', { className: 'space-y-2' },
                   locations.map(l => h('div', { key: l.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center text-xs' },
                     h('span', { className: 'font-bold' }, l.name),
-                    h('button', { onClick: () => setLocations(locations.filter(loc => loc.id !== l.id)), className: 'text-rose-500' }, 'Löschen')
+                    h('button', { onClick: () => { markDeleted('locations', l.id); setLocations(locations.filter(loc => loc.id !== l.id)); }, className: 'text-rose-500' }, 'Löschen')
                   ))
                 )
               ),
@@ -1267,10 +2288,59 @@
                 h('div', { className: 'space-y-2' },
                   timeSlots.map(s => h('div', { key: s.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center text-xs' },
                     h('span', { className: 'font-bold' }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`),
-                    h('button', { onClick: () => setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)), className: 'text-rose-500' }, 'Löschen')
+                    h('button', { onClick: () => { markDeleted('timeSlots', s.id); setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)); }, className: 'text-rose-500' }, 'Löschen')
                   ))
                 )
               )
+            ),
+
+            h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
+              h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Gruppen verwalten'),
+              h('p', { className: 'text-xs text-slate-500' }, 'Gruppen (z. B. Teams oder Schichtgruppen) anlegen und Personen zuordnen. Terminen und Mustern können optional relevante Gruppen zugewiesen werden – bei der automatischen Zuteilung werden dann nur Personen dieser Gruppen berücksichtigt.'),
+              h('form', { onSubmit: handleAddGroup, className: 'flex gap-2 items-center' },
+                h('input', {
+                  type: 'text',
+                  placeholder: 'Neuer Gruppenname...',
+                  value: newGroupName,
+                  onChange: (e) => setNewGroupName(e.target.value),
+                  className: 'text-xs p-2 border rounded-lg bg-white border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500'
+                }),
+                h('button', { type: 'submit', className: 'bg-indigo-600 text-white text-xs font-bold px-3 py-2 rounded-lg' }, '+ Gruppe')
+              ),
+              h('div', { className: 'space-y-3' },
+                groups.length === 0 ? h('p', { className: 'text-xs text-slate-400 italic' }, 'Noch keine Gruppen angelegt.') :
+                groups.map(g => h('div', { key: g.id, className: 'p-3 border rounded-lg bg-slate-50 space-y-2' },
+                  h('div', { className: 'flex justify-between items-center' },
+                    h('span', { className: 'font-bold text-xs text-slate-800' }, `${g.name} (${(g.personIds || []).length} Personen)`),
+                    h('button', { onClick: () => handleDeleteGroup(g.id), className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
+                  ),
+                  h('div', { className: 'flex flex-wrap gap-1' },
+                    [...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(p => {
+                      const isMember = (g.personIds || []).includes(p.id);
+                      return h('button', {
+                        key: p.id, type: 'button',
+                        onClick: () => toggleGroupMember(g.id, p.id),
+                        className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold ${isMember ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300'}`
+                      }, `${isMember ? '✓ ' : ''}${p.name}`)
+                    })
+                  )
+                ))
+              )
+            ),
+
+            h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
+              h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Feiertage'),
+              h('div', { className: 'max-w-xs' },
+                h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Bundesland (für Feiertage im Kalender)'),
+                h('select', {
+                  value: bundesland,
+                  onChange: (e) => setBundesland(e.target.value),
+                  className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
+                },
+                  GERMAN_STATES.map(s => h('option', { key: s.code, value: s.code }, s.name))
+                )
+              ),
+              h('p', { className: 'text-xs text-slate-500' }, 'Legt fest, welche gesetzlichen Feiertage im Kalender angezeigt und bei der Planung berücksichtigt werden. Standard: Sachsen.')
             ),
 
             h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
@@ -1282,7 +2352,7 @@
                 }, '📥 Gesamte App (.html) herunterladen'),
                 h('button', {
                   onClick: () => {
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ locations, timeSlots, patterns, people, schedule }));
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ locations, timeSlots, patterns, groups, people, schedule }));
                     const downloadAnchor = document.createElement('a');
                     downloadAnchor.setAttribute("href", dataStr);
                     downloadAnchor.setAttribute("download", "aufgabenplaner_backup.json");
