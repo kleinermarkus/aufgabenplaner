@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.8.8';
+    const APP_VERSION = '1.8.9';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -137,7 +137,27 @@
       return `${year}-${month}-${day}`;
     }
 
-    function getGermanHolidaysSaxony(year) {
+    const GERMAN_STATES = [
+      { code: 'BW', name: 'Baden-Württemberg' },
+      { code: 'BY', name: 'Bayern' },
+      { code: 'BE', name: 'Berlin' },
+      { code: 'BB', name: 'Brandenburg' },
+      { code: 'HB', name: 'Bremen' },
+      { code: 'HH', name: 'Hamburg' },
+      { code: 'HE', name: 'Hessen' },
+      { code: 'MV', name: 'Mecklenburg-Vorpommern' },
+      { code: 'NI', name: 'Niedersachsen' },
+      { code: 'NW', name: 'Nordrhein-Westfalen' },
+      { code: 'RP', name: 'Rheinland-Pfalz' },
+      { code: 'SL', name: 'Saarland' },
+      { code: 'SN', name: 'Sachsen' },
+      { code: 'ST', name: 'Sachsen-Anhalt' },
+      { code: 'SH', name: 'Schleswig-Holstein' },
+      { code: 'TH', name: 'Thüringen' }
+    ];
+
+    function getGermanHolidays(year, bundesland) {
+      const bl = GERMAN_STATES.some(s => s.code === bundesland) ? bundesland : 'SN';
       const getEaster = (y) => {
         const a = y % 19, b = Math.floor(y / 100), c = y % 100;
         const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
@@ -161,7 +181,6 @@
         [`${year}-01-01`]: 'Neujahr',
         [`${year}-05-01`]: 'Tag der Arbeit',
         [`${year}-10-03`]: 'Tag der Deutschen Einheit',
-        [`${year}-10-31`]: 'Reformationstag',
         [`${year}-12-25`]: '1. Weihnachtstag',
         [`${year}-12-26`]: '2. Weihnachtstag',
         [format(addDays(easter, -2))]: 'Karfreitag',
@@ -170,13 +189,27 @@
         [format(addDays(easter, 50))]: 'Pfingstmontag',
       };
 
-      const nov23 = new Date(year, 10, 23);
-      let bussBettag = new Date(nov23);
-      let dayOfWeek = bussBettag.getDay();
-      let diff = dayOfWeek >= 3 ? dayOfWeek - 3 : 7 - (3 - dayOfWeek);
-      if (diff === 0) diff = 7;
-      bussBettag.setDate(bussBettag.getDate() - diff);
-      holidays[format(bussBettag)] = 'Buß- und Bettag';
+      const inState = (codes) => codes.includes(bl);
+      if (inState(['BW', 'BY', 'ST'])) holidays[`${year}-01-06`] = 'Heilige Drei Könige';
+      if (inState(['BE', 'MV'])) holidays[`${year}-03-08`] = 'Internationaler Frauentag';
+      if (inState(['BB', 'HB', 'HH', 'MV', 'NI', 'SH', 'SN', 'ST', 'TH'])) holidays[`${year}-10-31`] = 'Reformationstag';
+      if (inState(['BW', 'BY', 'HE', 'NW', 'RP'])) holidays[format(addDays(easter, 60))] = 'Fronleichnam';
+      if (inState(['BY', 'SL'])) holidays[`${year}-08-15`] = 'Mariä Himmelfahrt';
+      if (inState(['BW', 'BY', 'NW', 'RP', 'SL'])) holidays[`${year}-11-01`] = 'Allerheiligen';
+      if (inState(['TH'])) holidays[`${year}-09-20`] = 'Weltkindertag';
+      if (inState(['BB'])) {
+        holidays[format(easter)] = 'Ostersonntag';
+        holidays[format(addDays(easter, 49))] = 'Pfingstsonntag';
+      }
+      if (bl === 'SN') {
+        const nov23 = new Date(year, 10, 23);
+        let bussBettag = new Date(nov23);
+        let dayOfWeek = bussBettag.getDay();
+        let diff = dayOfWeek >= 3 ? dayOfWeek - 3 : 7 - (3 - dayOfWeek);
+        if (diff === 0) diff = 7;
+        bussBettag.setDate(bussBettag.getDate() - diff);
+        holidays[format(bussBettag)] = 'Buß- und Bettag';
+      }
 
       return holidays;
     }
@@ -249,6 +282,8 @@
       const connectTimerRef = useRef(null);
       const reconnectAttemptsRef = useRef(0);
       const [syncLog, setSyncLog] = useState(() => JSON.parse(localStorage.getItem('app_synclog')) || []);
+      const [bundesland, setBundesland] = useState(() => localStorage.getItem('app_bundesland') || 'SN');
+      useEffect(() => localStorage.setItem('app_bundesland', bundesland), [bundesland]);
 
       // Lösch-Markierungen (Tombstones): Gelöschte IDs werden gemerkt und mit synchronisiert,
       // damit Löschungen auf anderen Geräten nicht durch den Union-Merge wiederhergestellt werden.
@@ -692,7 +727,7 @@
 
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
-      const holidays = useMemo(() => getGermanHolidaysSaxony(year), [year]);
+      const holidays = useMemo(() => getGermanHolidays(year, bundesland), [year, bundesland]);
 
       const getPersonAvailabilityDetails = (person, slotId, locationId, dateStr) => {
         const slot = timeSlots.find(s => s.id === slotId);
@@ -1968,6 +2003,21 @@
                   ))
                 )
               )
+            ),
+
+            h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
+              h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Feiertage'),
+              h('div', { className: 'max-w-xs' },
+                h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Bundesland (für Feiertage im Kalender)'),
+                h('select', {
+                  value: bundesland,
+                  onChange: (e) => setBundesland(e.target.value),
+                  className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
+                },
+                  GERMAN_STATES.map(s => h('option', { key: s.code, value: s.code }, s.name))
+                )
+              ),
+              h('p', { className: 'text-xs text-slate-500' }, 'Legt fest, welche gesetzlichen Feiertage im Kalender angezeigt und bei der Planung berücksichtigt werden. Standard: Sachsen.')
             ),
 
             h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
