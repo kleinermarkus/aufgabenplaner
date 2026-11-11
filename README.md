@@ -10,6 +10,23 @@ Im Monats-Kalender genügt ein **Tipp/Antippen auf den Tag**, um ihn auszuwähle
 
 Im Tab **⚙️ Stammdaten & Export** lässt sich das **Bundesland für die Feiertage** wählen – der Kalender zeigt dann die dortigen gesetzlichen Feiertage (inkl. der länderspezifischen wie Fronleichnam, Allerheiligen, Weltkindertag o. Ä.). Die Einstellung wird pro Gerät gespeichert.
 
+## Gruppen
+
+Im Tab **⚙️ Stammdaten & Export** lassen sich **Gruppen** anlegen (z. B. Teams oder Schichtgruppen) und Personen per Klick zuordnen. Einzelnen Aufgaben und wiederkehrenden Mustern können optional **relevante Gruppen** zugewiesen werden (leer = für alle relevant):
+
+- Bei der **automatischen Zuteilung** werden Aufgaben mit Gruppen nur an Mitglieder dieser Gruppen vergeben.
+- In der **Verfügbarkeits-Liste** werden Nicht-Mitglieder ausgegraut mit dem Grund „Nicht in relevanter Gruppe“.
+- Wird eine Gruppe gelöscht, wird sie automatisch aus allen Terminen und Mustern entfernt.
+
+## Monatliche Muster
+
+Wiederkehrende Muster können neben „Wöchentlich“ und „Alle 2 Wochen“ auch **monatlich** laufen:
+
+- **Am gleichen Tag des Monats** (z. B. jeden 15.) – Monate ohne diesen Tag werden übersprungen.
+- **Am x. Wochentag im Monat** (z. B. am 2. Montag oder am letzten Freitag).
+
+Monatliche Termine werden unabhängig vom Wochentag des Zeitslots erzeugt; die Uhrzeit kommt weiterhin vom Zeitslot.
+
 Einfach `index.html` in einem Browser öffnen (Internetverbindung nötig, da React/Tailwind per CDN geladen werden). Alle Daten bleiben lokal im Browser (localStorage).
 
 ## Faire automatische Zuteilung

@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#4f46e5">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <title>Monatsplaner & Aufgabenverteiler (Sachsen)</title>
+  <title>Monatsplaner & Aufgabenverteiler</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & ReactDOM -->
@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.8.9';
+    const APP_VERSION = '1.9.0';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -214,6 +214,36 @@
       return holidays;
     }
 
+    // Prüft, ob ein Datum der x-te bestimmte Wochentag im Monat ist (week: 1-4 oder 'last')
+    function isNthWeekdayOfMonth(date, week, weekday) {
+      if (date.getDay() !== weekday) return false;
+      if (week === 'last') {
+        const next = new Date(date);
+        next.setDate(next.getDate() + 7);
+        return next.getMonth() !== date.getMonth();
+      }
+      return Math.floor((date.getDate() - 1) / 7) + 1 === week;
+    }
+
+    // Prüft, ob ein Muster an einem Datum greift (wöchentlich, 2-wöchentlich oder monatlich)
+    function patternMatchesDate(pat, date, slot) {
+      if (pat.frequency === 'monthly') {
+        if (pat.monthlyMode === 'nthWeekday') return isNthWeekdayOfMonth(date, pat.monthlyWeek, parseInt(pat.monthlyWeekDay, 10));
+        return date.getDate() === (parseInt(pat.monthlyDay, 10) || 1);
+      }
+      if (!slot || slot.dayOfWeek !== date.getDay()) return false;
+      if (pat.frequency === 'weekly') return true;
+      if (pat.frequency === 'biweekly') {
+        const isoWeek = getIsoWeek(date);
+        const isEvenWeek = isoWeek % 2 === 0;
+        const weekNum = Math.floor(date.getDate() / 7);
+        return (pat.weekParity === 'even' && isEvenWeek) ||
+          (pat.weekParity === 'odd' && !isEvenWeek) ||
+          (!pat.weekParity && weekNum % 2 === 0);
+      }
+      return false;
+    }
+
     const INITIAL_LOCATIONS = [
       { id: 'loc-1', name: 'Hauptgebäude' },
       { id: 'loc-2', name: 'Saal B' },
@@ -226,6 +256,8 @@
       { id: 'slot-3', dayOfWeek: 5, time: '18:00' },
       { id: 'slot-4', dayOfWeek: 0, time: '09:30' }
     ];
+
+    const INITIAL_GROUPS = [];
 
     const INITIAL_PATTERNS = [
       { id: 'pat-1', slotId: 'slot-1', locationId: 'loc-1', frequency: 'weekly' },
@@ -263,6 +295,13 @@
       const [newPatLoc, setNewPatLoc] = useState('');
       const [newPatFreq, setNewPatFreq] = useState('weekly');
       const [newPatParity, setNewPatParity] = useState('even');
+      const [newPatMonthlyMode, setNewPatMonthlyMode] = useState('dayOfMonth');
+      const [newPatMonthlyDay, setNewPatMonthlyDay] = useState('1');
+      const [newPatMonthlyWeek, setNewPatMonthlyWeek] = useState('1');
+      const [newPatMonthlyWeekDay, setNewPatMonthlyWeekDay] = useState('1');
+      const [newPatGroupIds, setNewPatGroupIds] = useState([]);
+      const [newGroupName, setNewGroupName] = useState('');
+      const [newTaskGroupIds, setNewTaskGroupIds] = useState([]);
       const [editingPattern, setEditingPattern] = useState(null);
 
       // State für manuelle Abwesenheiten pro Person
@@ -284,10 +323,12 @@
       const [syncLog, setSyncLog] = useState(() => JSON.parse(localStorage.getItem('app_synclog')) || []);
       const [bundesland, setBundesland] = useState(() => localStorage.getItem('app_bundesland') || 'SN');
       useEffect(() => localStorage.setItem('app_bundesland', bundesland), [bundesland]);
+      const [groups, setGroups] = useState(() => JSON.parse(localStorage.getItem('app_groups')) || INITIAL_GROUPS);
+      useEffect(() => localStorage.setItem('app_groups', JSON.stringify(groups)), [groups]);
 
       // Lösch-Markierungen (Tombstones): Gelöschte IDs werden gemerkt und mit synchronisiert,
       // damit Löschungen auf anderen Geräten nicht durch den Union-Merge wiederhergestellt werden.
-      const TOMBSTONE_COLLECTIONS = ['locations', 'timeSlots', 'patterns', 'people', 'schedule', 'absences'];
+      const TOMBSTONE_COLLECTIONS = ['locations', 'timeSlots', 'patterns', 'groups', 'people', 'schedule', 'absences'];
       const normalizeTombstones = (raw) => {
         const base = {};
         TOMBSTONE_COLLECTIONS.forEach(c => { base[c] = {}; });
@@ -353,7 +394,7 @@
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
       const SYNC_PREFIX = 'aufgabenplaner-';
 
-      const collectSyncData = () => ({ appVersion: APP_VERSION, locations, timeSlots, patterns, people, schedule, tombstones });
+      const collectSyncData = () => ({ appVersion: APP_VERSION, locations, timeSlots, patterns, groups, people, schedule, tombstones });
 
       const mergeById = (local, incoming) => {
         const map = new Map((local || []).map(item => [item.id, item]));
@@ -406,7 +447,7 @@
         };
         const revive = (collection, id) => { delete mergedTombstones[collection][id]; };
 
-        const added = { locations: 0, timeSlots: 0, patterns: 0, people: 0, schedule: 0, deletions: 0 };
+        const added = { locations: 0, timeSlots: 0, patterns: 0, groups: 0, people: 0, schedule: 0, deletions: 0 };
         let changed = false;
 
         if (Array.isArray(data.locations)) {
@@ -435,6 +476,15 @@
           added.patterns = filtered.filter(i => !patterns.some(l => l.id === i.id)).length;
           const next = mergeById(keptLocal, filtered);
           if (stableStringify(next) !== stableStringify(patterns)) { changed = true; setPatterns(next); }
+        }
+        if (Array.isArray(data.groups)) {
+          const filtered = data.groups.filter(i => i && i.id && !isDeleted('groups', i.id, i.updatedAt));
+          filtered.forEach(i => { if (i.updatedAt) revive('groups', i.id); });
+          const keptLocal = groups.filter(l => !isDeleted('groups', l.id, l.updatedAt));
+          added.deletions += groups.length - keptLocal.length;
+          added.groups = filtered.filter(i => !groups.some(l => l.id === i.id)).length;
+          const next = mergeById(keptLocal, filtered);
+          if (stableStringify(next) !== stableStringify(groups)) { changed = true; setGroups(next); }
         }
         if (Array.isArray(data.schedule)) {
           const filtered = data.schedule.filter(i => i && i.id && !isDeleted('schedule', i.id, i.updatedAt));
@@ -474,7 +524,7 @@
           setTombstones(mergedTombstones);
         }
         if (changed) {
-          const logText = `Übernommen: ${added.locations} Orte, ${added.timeSlots} Zeitslots, ${added.patterns} Muster, ${added.people} Personen, ${added.schedule} Termine` + (added.deletions > 0 ? `, ${added.deletions} Löschungen` : '');
+          const logText = `Übernommen: ${added.locations} Orte, ${added.timeSlots} Zeitslots, ${added.patterns} Muster, ${added.groups} Gruppen, ${added.people} Personen, ${added.schedule} Termine` + (added.deletions > 0 ? `, ${added.deletions} Löschungen` : '');
           addSyncLog('empfangen', logText);
         }
         setTimeout(() => { suppressSendRef.current = false; }, 800);
@@ -729,9 +779,14 @@
       const month = currentDate.getMonth();
       const holidays = useMemo(() => getGermanHolidays(year, bundesland), [year, bundesland]);
 
-      const getPersonAvailabilityDetails = (person, slotId, locationId, dateStr) => {
+      const getPersonAvailabilityDetails = (person, slotId, locationId, dateStr, groupIds) => {
         const slot = timeSlots.find(s => s.id === slotId);
         if (!slot) return { isAvailable: false, reason: 'Ungültiger Zeitslot' };
+
+        if (Array.isArray(groupIds) && groupIds.length > 0) {
+          const isMember = groupIds.some(gid => groups.find(g => g.id === gid)?.personIds?.includes(person.id));
+          if (!isMember) return { isAvailable: false, reason: 'Nicht in relevanter Gruppe' };
+        }
 
         const isAbsent = person.absences?.some(abs => dateStr >= abs.start && dateStr <= abs.end);
         if (isAbsent) return { isAvailable: false, reason: 'Abwesend/Urlaub' };
@@ -800,7 +855,7 @@
 
       const getRecommendedPersonIdForTask = (task) => {
         const candidates = people.filter(p => {
-          const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
+          const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr, task.groupIds);
           return details.isAvailable;
         });
         if (candidates.length === 0) return null;
@@ -835,36 +890,28 @@
 
           patterns.forEach(pat => {
             const slot = timeSlots.find(s => s.id === pat.slotId);
-            if (slot && slot.dayOfWeek === currDay) {
-              const isoWeek = getIsoWeek(curr);
-              const isEvenWeek = isoWeek % 2 === 0;
-              const matchesBiweekly = pat.frequency === 'biweekly' && (
-                (pat.weekParity === 'even' && isEvenWeek) || 
-                (pat.weekParity === 'odd' && !isEvenWeek) ||
-                (!pat.weekParity && weekNum % 2 === 0)
-              );
-              if (pat.frequency === 'weekly' || matchesBiweekly) {
-                // Duplikatsprüfung: Zur gleichen Zeit (Datum + Uhrzeit) darf nur ein Termin
-                // existieren – unabhängig von Slot-ID und Ort, auch innerhalb eines Durchlaufs
-                // und in überlappenden Kalenderwochen beim Monatswechsel
-                const sameTime = (t) => {
-                  if (t.dateStr !== dateStr) return false;
-                  if (t.slotId === pat.slotId && t.locationId === pat.locationId) return true;
-                  const tSlot = timeSlots.find(s => s.id === t.slotId);
-                  return !!tSlot && !!slot && tSlot.time === slot.time;
-                };
-                const exists = schedule.some(sameTime) || newTasks.some(sameTime);
-                if (!exists) {
-                  newTasks.push({
-                    id: `task-${dateStr}-${pat.slotId}-${pat.locationId}`,
-                    dateStr,
-                    slotId: pat.slotId,
-                    locationId: pat.locationId,
-                    assignedPersonId: null,
-                    isManual: false,
-                    updatedAt: Date.now()
-                  });
-                }
+            if (slot && patternMatchesDate(pat, curr, slot)) {
+              // Duplikatsprüfung: Zur gleichen Zeit (Datum + Uhrzeit) darf nur ein Termin
+              // existieren – unabhängig von Slot-ID und Ort, auch innerhalb eines Durchlaufs
+              // und in überlappenden Kalenderwochen beim Monatswechsel
+              const sameTime = (t) => {
+                if (t.dateStr !== dateStr) return false;
+                if (t.slotId === pat.slotId && t.locationId === pat.locationId) return true;
+                const tSlot = timeSlots.find(s => s.id === t.slotId);
+                return !!tSlot && !!slot && tSlot.time === slot.time;
+              };
+              const exists = schedule.some(sameTime) || newTasks.some(sameTime);
+              if (!exists) {
+                newTasks.push({
+                  id: `task-${dateStr}-${pat.slotId}-${pat.locationId}`,
+                  dateStr,
+                  slotId: pat.slotId,
+                  locationId: pat.locationId,
+                  groupIds: Array.isArray(pat.groupIds) ? pat.groupIds : [],
+                  assignedPersonId: null,
+                  isManual: false,
+                  updatedAt: Date.now()
+                });
               }
             }
           });
@@ -932,7 +979,7 @@
           if (task.assignedPersonId) return task;
 
           const candidates = people.filter(p => {
-            const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
+            const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr, task.groupIds);
             return details.isAvailable;
           });
 
@@ -979,6 +1026,7 @@
           setLocations(INITIAL_LOCATIONS);
           setTimeSlots(INITIAL_SLOTS);
           setPatterns(INITIAL_PATTERNS);
+          setGroups(INITIAL_GROUPS);
           setPeople(INITIAL_PEOPLE);
           setSchedule([]);
           setTombstones(normalizeTombstones(null));
@@ -1046,9 +1094,51 @@
           showToast('Bitte Zeitslot und Ort auswählen.', 'error');
           return;
         }
-        const newPat = { id: `pat-${Date.now()}`, slotId: newPatSlot, locationId: newPatLoc, frequency: newPatFreq, weekParity: newPatFreq === 'biweekly' ? newPatParity : null };
+        const newPat = {
+          id: `pat-${Date.now()}`,
+          slotId: newPatSlot,
+          locationId: newPatLoc,
+          frequency: newPatFreq,
+          weekParity: newPatFreq === 'biweekly' ? newPatParity : null,
+          monthlyMode: newPatFreq === 'monthly' ? newPatMonthlyMode : null,
+          monthlyDay: newPatFreq === 'monthly' && newPatMonthlyMode === 'dayOfMonth' ? parseInt(newPatMonthlyDay, 10) || 1 : null,
+          monthlyWeek: newPatFreq === 'monthly' && newPatMonthlyMode === 'nthWeekday' ? newPatMonthlyWeek : null,
+          monthlyWeekDay: newPatFreq === 'monthly' && newPatMonthlyMode === 'nthWeekday' ? parseInt(newPatMonthlyWeekDay, 10) : null,
+          groupIds: [...newPatGroupIds]
+        };
         setPatterns([...patterns, newPat]);
+        setNewPatGroupIds([]);
         showToast('Wiederkehrendes Muster angelegt.', 'success');
+      };
+
+      // Gruppe anlegen
+      const handleAddGroup = (e) => {
+        e.preventDefault();
+        const trimmed = newGroupName.trim();
+        if (!trimmed) return;
+        if (groups.some(g => g.name.toLowerCase() === trimmed.toLowerCase())) {
+          showToast('Gruppe existiert bereits!', 'error');
+          return;
+        }
+        setGroups([...groups, { id: `grp-${Date.now()}`, name: trimmed, personIds: [] }]);
+        setNewGroupName('');
+        showToast('Gruppe angelegt.', 'success');
+      };
+
+      const toggleGroupMember = (groupId, personId) => {
+        setGroups(groups.map(g => g.id === groupId ? {
+          ...g,
+          personIds: g.personIds?.includes(personId) ? g.personIds.filter(id => id !== personId) : [...(g.personIds || []), personId]
+        } : g));
+      };
+
+      // Gruppe löschen: Referenzen in Terminen und Mustern entfernen
+      const handleDeleteGroup = (groupId) => {
+        markDeleted('groups', groupId);
+        setGroups(groups.filter(g => g.id !== groupId));
+        setSchedule(prev => prev.map(t => t.groupIds?.includes(groupId) ? { ...t, groupIds: t.groupIds.filter(x => x !== groupId), updatedAt: Date.now() } : t));
+        setPatterns(prev => prev.map(p => p.groupIds?.includes(groupId) ? { ...p, groupIds: p.groupIds.filter(x => x !== groupId) } : p));
+        showToast('Gruppe gelöscht.', 'success');
       };
 
       // Person hinzufügen
@@ -1212,6 +1302,7 @@
             if (data.locations) setLocations(data.locations);
             if (data.timeSlots) setTimeSlots(data.timeSlots);
             if (data.patterns) setPatterns(data.patterns);
+            if (data.groups) setGroups(data.groups);
             if (data.people) setPeople(data.people);
             if (data.schedule) setSchedule(data.schedule);
             showToast('Backup erfolgreich importiert!', 'success');
@@ -1303,7 +1394,7 @@
         // Header
         h('header', { className: 'bg-white border-b border-slate-200 px-3 sm:px-6 py-4 shadow-sm flex flex-wrap justify-between items-center gap-2 sm:gap-4' },
           h('div', null,
-            h('h1', { className: 'text-xl font-bold text-slate-900 flex items-center gap-2' }, '🗓️ Monats- & Wochenplaner (Sachsen)',
+            h('h1', { className: 'text-xl font-bold text-slate-900 flex items-center gap-2' }, '🗓️ Monats- & Wochenplaner',
             h('span', { className: 'text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded no-print' }, `v${APP_VERSION}`)),
             h('p', { className: 'text-xs text-slate-500' }, 'Automatische gerechte Aufgabenverteilung & Feiertagsunterstützung')
           ),
@@ -1408,7 +1499,7 @@
             // Druckkopf für PDF Export
             h('div', { className: 'hidden print:block text-center mb-4' },
               h('h2', { className: 'text-xl font-bold' }, `Monatsplan: ${currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}`),
-              h('p', { className: 'text-xs text-slate-500' }, 'Erstellt mit Monats- & Wochenplaner (Sachsen)')
+              h('p', { className: 'text-xs text-slate-500' }, 'Erstellt mit Monats- & Wochenplaner')
             ),
 
             h('div', { className: 'grid grid-cols-1 lg:grid-cols-4 gap-6' },
@@ -1440,6 +1531,12 @@
                           h('button', { onClick: () => { markDeleted('schedule', task.id); setSchedule(schedule.filter(t => t.id !== task.id)); }, className: 'text-rose-500 text-xs' }, 'Entfernen')
                         )
                       ),
+                      (() => {
+                        const taskGroups = (task.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
+                        return taskGroups.length > 0 ? h('div', { className: 'flex flex-wrap gap-1' },
+                          taskGroups.map(gn => h('span', { key: gn, className: 'px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[9px] font-semibold' }, gn))
+                        ) : null;
+                      })(),
                       isEditingThis ? h('form', {
                         onSubmit: (e) => {
                           e.preventDefault();
@@ -1479,7 +1576,7 @@
                           ) : null,
                           h('div', { className: 'space-y-0.5' },
                             [...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(p => {
-                              const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
+                              const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr, task.groupIds);
                               const isAssigned = task.assignedPersonId === p.id;
                               const isRec = p.id === recId;
                               return h('div', { key: p.id, className: 'flex justify-between items-center gap-2 text-[10px]' },
@@ -1515,15 +1612,27 @@
                         dateStr: selectedDateStr,
                         slotId,
                         locationId,
+                        groupIds: [...newTaskGroupIds],
                         assignedPersonId: null,
                         isManual: true,
                         updatedAt: Date.now()
                       }]);
+                      setNewTaskGroupIds([]);
                       showToast('Manuelle Aufgabe angelegt', 'success');
                     }
                   },
                   className: 'w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg border border-indigo-200 flex items-center justify-center gap-1'
-                }, '+ Aufgabe anlegen')
+                }, '+ Aufgabe anlegen'),
+                groups.length > 0 ? h('div', { className: 'space-y-1' },
+                  h('label', { className: 'text-[10px] font-bold text-slate-500 block' }, 'Relevante Gruppen für neue Aufgabe (optional)'),
+                  h('div', { className: 'flex flex-wrap gap-1' },
+                    groups.map(g => h('button', {
+                      key: g.id, type: 'button',
+                      onClick: () => setNewTaskGroupIds(newTaskGroupIds.includes(g.id) ? newTaskGroupIds.filter(id => id !== g.id) : [...newTaskGroupIds, g.id]),
+                      className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold ${newTaskGroupIds.includes(g.id) ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300'}`
+                    }, g.name))
+                  )
+                ) : null
               )
             )
           ) : activeTab === 'people' ? h('div', { className: 'space-y-6' },
@@ -1810,7 +1919,8 @@
                     className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
                   },
                     h('option', { value: 'weekly' }, 'Wöchentlich'),
-                    h('option', { value: 'biweekly' }, 'Alle 2 Wochen')
+                    h('option', { value: 'biweekly' }, 'Alle 2 Wochen'),
+                    h('option', { value: 'monthly' }, 'Monatlich')
                   )
                 ),
                 newPatFreq === 'biweekly' ? h('div', null,
@@ -1824,6 +1934,57 @@
                     h('option', { value: 'odd' }, 'Nur in ungeraden Wochen (KW 1, 3, 5...)')
                   )
                 ) : null,
+                newPatFreq === 'monthly' ? h('div', null,
+                  h('label', { className: 'text-xs font-bold text-slate-500 block mb-1' }, 'Monatlicher Rhythmus'),
+                  h('select', {
+                    value: newPatMonthlyMode,
+                    onChange: (e) => setNewPatMonthlyMode(e.target.value),
+                    className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
+                  },
+                    h('option', { value: 'dayOfMonth' }, 'Am gleichen Tag des Monats'),
+                    h('option', { value: 'nthWeekday' }, 'Am x. Wochentag im Monat')
+                  )
+                ) : null,
+                newPatFreq === 'monthly' && newPatMonthlyMode === 'dayOfMonth' ? h('div', null,
+                  h('label', { className: 'text-xs font-bold text-slate-500 block mb-1' }, 'Tag im Monat'),
+                  h('input', {
+                    type: 'number', min: 1, max: 31,
+                    value: newPatMonthlyDay,
+                    onChange: (e) => setNewPatMonthlyDay(e.target.value),
+                    className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
+                  })
+                ) : null,
+                newPatFreq === 'monthly' && newPatMonthlyMode === 'nthWeekday' ? h('div', null,
+                  h('label', { className: 'text-xs font-bold text-slate-500 block mb-1' }, 'Wiederholung im Monat'),
+                  h('div', { className: 'flex gap-2' },
+                    h('select', {
+                      value: newPatMonthlyWeek,
+                      onChange: (e) => setNewPatMonthlyWeek(e.target.value),
+                      className: 'w-1/2 text-xs p-2 border rounded-lg bg-white border-slate-300'
+                    },
+                      h('option', { value: '1' }, '1.'), h('option', { value: '2' }, '2.'),
+                      h('option', { value: '3' }, '3.'), h('option', { value: '4' }, '4.'),
+                      h('option', { value: 'last' }, 'letzter')
+                    ),
+                    h('select', {
+                      value: newPatMonthlyWeekDay,
+                      onChange: (e) => setNewPatMonthlyWeekDay(e.target.value),
+                      className: 'w-1/2 text-xs p-2 border rounded-lg bg-white border-slate-300'
+                    },
+                      DAY_NAMES.map((d, idx) => h('option', { key: idx, value: idx }, d))
+                    )
+                  )
+                ) : null,
+                groups.length > 0 ? h('div', { className: 'md:col-span-4' },
+                  h('label', { className: 'text-xs font-bold text-slate-500 block mb-1' }, 'Relevante Gruppen (optional – leer = für alle)'),
+                  h('div', { className: 'flex flex-wrap gap-1' },
+                    groups.map(g => h('button', {
+                      key: g.id, type: 'button',
+                      onClick: () => setNewPatGroupIds(newPatGroupIds.includes(g.id) ? newPatGroupIds.filter(id => id !== g.id) : [...newPatGroupIds, g.id]),
+                      className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold ${newPatGroupIds.includes(g.id) ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300'}`
+                    }, g.name))
+                  )
+                ) : null,
                 h('button', { type: 'submit', className: 'bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold p-2.5 rounded-lg' }, '+ Muster speichern')
               )
             ),
@@ -1835,7 +1996,12 @@
                 patterns.map(pat => {
                   const slot = timeSlots.find(s => s.id === pat.slotId);
                   const loc = locations.find(l => l.id === pat.locationId);
-                  const freqText = pat.frequency === 'weekly' ? 'Wöchentlich' : (pat.weekParity === 'odd' ? 'Alle 2 Wochen (ungerade KW)' : 'Alle 2 Wochen (gerade KW)');
+                  const freqText = pat.frequency === 'weekly' ? 'Wöchentlich'
+                    : pat.frequency === 'monthly' ? (pat.monthlyMode === 'nthWeekday'
+                      ? `Monatlich am ${pat.monthlyWeek === 'last' ? 'letzten' : pat.monthlyWeek + '.'} ${DAY_NAMES[pat.monthlyWeekDay] || ''}`
+                      : `Monatlich am ${pat.monthlyDay || 1}.`)
+                    : (pat.weekParity === 'odd' ? 'Alle 2 Wochen (ungerade KW)' : 'Alle 2 Wochen (gerade KW)');
+                  const patGroups = (pat.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
                   const isEditingThis = editingPattern?.id === pat.id;
 
                   return h('div', { key: pat.id, className: 'p-3 border rounded-lg bg-slate-50 space-y-2 text-sm' },
@@ -1855,6 +2021,9 @@
                         h('button', { onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
                       )
                     ),
+                    patGroups.length > 0 ? h('div', { className: 'flex flex-wrap gap-1' },
+                      patGroups.map(gn => h('span', { key: gn, className: 'px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-semibold' }, gn))
+                    ) : null,
                     isEditingThis ? h('form', {
                       onSubmit: (e) => {
                         e.preventDefault();
@@ -1862,8 +2031,14 @@
                         const locationId = e.target.elements.editLoc.value;
                         const frequency = e.target.elements.editFreq.value;
                         const weekParity = frequency === 'biweekly' ? e.target.elements.editParity.value : null;
+                        const monthlyMode = frequency === 'monthly' ? e.target.elements.editMonthlyMode.value : null;
+                        const monthlyDay = frequency === 'monthly' && monthlyMode === 'dayOfMonth' ? parseInt(e.target.elements.editMonthlyDay.value, 10) || 1 : null;
+                        const monthlyWeek = frequency === 'monthly' && monthlyMode === 'nthWeekday' ? e.target.elements.editMonthlyWeek.value : null;
+                        const monthlyWeekDay = frequency === 'monthly' && monthlyMode === 'nthWeekday' ? parseInt(e.target.elements.editMonthlyWeekDay.value, 10) : null;
+                        const editGroupBoxes = e.target.elements.editGroup;
+                        const editGroupIds = editGroupBoxes ? [...editGroupBoxes].filter(cb => cb.checked).map(cb => cb.value) : [];
 
-                        setPatterns(patterns.map(p => p.id === pat.id ? { ...p, slotId, locationId, frequency, weekParity } : p));
+                        setPatterns(patterns.map(p => p.id === pat.id ? { ...p, slotId, locationId, frequency, weekParity, monthlyMode, monthlyDay, monthlyWeek, monthlyWeekDay, groupIds: editGroupIds } : p));
                         setEditingPattern(null);
                         showToast('Muster erfolgreich aktualisiert!', 'success');
                       },
@@ -1893,20 +2068,54 @@
                             className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
                           },
                             h('option', { value: 'weekly' }, 'Wöchentlich'),
-                            h('option', { value: 'biweekly' }, 'Alle 2 Wochen')
+                            h('option', { value: 'biweekly' }, 'Alle 2 Wochen'),
+                            h('option', { value: 'monthly' }, 'Monatlich')
                           )
                         )
                       ),
-                      h('div', { className: 'flex gap-2 items-center pt-1' },
-                        h('div', { className: 'flex-1' },
+                      h('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' },
+                        h('div', null,
                           h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Wochen-Rhythmus (bei 2-wöchentlich)'),
                           h('select', { name: 'editParity', defaultValue: pat.weekParity || 'even', className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' },
                             h('option', { value: 'even' }, 'Nur in geraden Wochen (KW 2, 4, 6...)'),
                             h('option', { value: 'odd' }, 'Nur in ungeraden Wochen (KW 1, 3, 5...)')
                           )
                         ),
-                        h('button', { type: 'submit', className: 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg self-end' }, 'Speichern')
-                      )
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Monatlicher Rhythmus (bei monatlich)'),
+                          h('select', { name: 'editMonthlyMode', defaultValue: pat.monthlyMode || 'dayOfMonth', className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' },
+                            h('option', { value: 'dayOfMonth' }, 'Am gleichen Tag des Monats'),
+                            h('option', { value: 'nthWeekday' }, 'Am x. Wochentag im Monat')
+                          )
+                        ),
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Tag im Monat (bei Tag des Monats)'),
+                          h('input', { name: 'editMonthlyDay', type: 'number', min: 1, max: 31, defaultValue: pat.monthlyDay || 1, className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' })
+                        ),
+                        h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Wiederholung im Monat (bei x. Wochentag)'),
+                          h('div', { className: 'flex gap-2' },
+                            h('select', { name: 'editMonthlyWeek', defaultValue: pat.monthlyWeek || '1', className: 'w-1/2 text-xs p-2 border rounded-lg bg-white border-slate-300' },
+                              h('option', { value: '1' }, '1.'), h('option', { value: '2' }, '2.'),
+                              h('option', { value: '3' }, '3.'), h('option', { value: '4' }, '4.'),
+                              h('option', { value: 'last' }, 'letzter')
+                            ),
+                            h('select', { name: 'editMonthlyWeekDay', defaultValue: pat.monthlyWeekDay ?? 1, className: 'w-1/2 text-xs p-2 border rounded-lg bg-white border-slate-300' },
+                              DAY_NAMES.map((d, idx) => h('option', { key: idx, value: idx }, d))
+                            )
+                          )
+                        )
+                      ),
+                      groups.length > 0 ? h('div', null,
+                        h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Relevante Gruppen (optional – leer = für alle)'),
+                        h('div', { className: 'flex flex-wrap gap-1' },
+                          groups.map(g => h('label', { key: g.id, className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold cursor-pointer flex items-center gap-1 ${(pat.groupIds || []).includes(g.id) ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300'}` },
+                            h('input', { type: 'checkbox', name: 'editGroup', value: g.id, defaultChecked: (pat.groupIds || []).includes(g.id), className: 'hidden' }),
+                            (pat.groupIds || []).includes(g.id) ? '✓ ' : '', g.name
+                          ))
+                        )
+                      ) : null,
+                      h('button', { type: 'submit', className: 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg self-end' }, 'Speichern')
                     ) : null
                   );
                 })
@@ -2006,6 +2215,40 @@
             ),
 
             h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
+              h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Gruppen verwalten'),
+              h('p', { className: 'text-xs text-slate-500' }, 'Gruppen (z. B. Teams oder Schichtgruppen) anlegen und Personen zuordnen. Terminen und Mustern können optional relevante Gruppen zugewiesen werden – bei der automatischen Zuteilung werden dann nur Personen dieser Gruppen berücksichtigt.'),
+              h('form', { onSubmit: handleAddGroup, className: 'flex gap-2 items-center' },
+                h('input', {
+                  type: 'text',
+                  placeholder: 'Neuer Gruppenname...',
+                  value: newGroupName,
+                  onChange: (e) => setNewGroupName(e.target.value),
+                  className: 'text-xs p-2 border rounded-lg bg-white border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500'
+                }),
+                h('button', { type: 'submit', className: 'bg-indigo-600 text-white text-xs font-bold px-3 py-2 rounded-lg' }, '+ Gruppe')
+              ),
+              h('div', { className: 'space-y-3' },
+                groups.length === 0 ? h('p', { className: 'text-xs text-slate-400 italic' }, 'Noch keine Gruppen angelegt.') :
+                groups.map(g => h('div', { key: g.id, className: 'p-3 border rounded-lg bg-slate-50 space-y-2' },
+                  h('div', { className: 'flex justify-between items-center' },
+                    h('span', { className: 'font-bold text-xs text-slate-800' }, `${g.name} (${(g.personIds || []).length} Personen)`),
+                    h('button', { onClick: () => handleDeleteGroup(g.id), className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
+                  ),
+                  h('div', { className: 'flex flex-wrap gap-1' },
+                    [...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(p => {
+                      const isMember = (g.personIds || []).includes(p.id);
+                      return h('button', {
+                        key: p.id, type: 'button',
+                        onClick: () => toggleGroupMember(g.id, p.id),
+                        className: `px-2 py-0.5 rounded-full border text-[10px] font-semibold ${isMember ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-300'}`
+                      }, `${isMember ? '✓ ' : ''}${p.name}`)
+                    })
+                  )
+                ))
+              )
+            ),
+
+            h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
               h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Feiertage'),
               h('div', { className: 'max-w-xs' },
                 h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Bundesland (für Feiertage im Kalender)'),
@@ -2029,7 +2272,7 @@
                 }, '📥 Gesamte App (.html) herunterladen'),
                 h('button', {
                   onClick: () => {
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ locations, timeSlots, patterns, people, schedule }));
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ locations, timeSlots, patterns, groups, people, schedule }));
                     const downloadAnchor = document.createElement('a');
                     downloadAnchor.setAttribute("href", dataStr);
                     downloadAnchor.setAttribute("download", "aufgabenplaner_backup.json");
