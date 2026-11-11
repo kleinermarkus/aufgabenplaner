@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.8.3';
+    const APP_VERSION = '1.8.4';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -1424,16 +1424,22 @@
                             h('span', null, '⭐ Empfehlung:'),
                             h('span', { className: 'underline' }, recPerson.name)
                           ) : null,
-                          h('select', {
-                            value: task.assignedPersonId || '',
-                            onChange: (e) => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: e.target.value || null, assignedBy: e.target.value ? 'manual' : null, updatedAt: Date.now() } : t)),
-                            className: 'w-full text-xs p-1 border rounded bg-white font-semibold'
-                          },
-                            h('option', { value: '' }, '-- Unbesetzt --'),
+                          h('div', { className: 'space-y-0.5' },
                             [...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(p => {
                               const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr);
+                              const isAssigned = task.assignedPersonId === p.id;
                               const isRec = p.id === recId;
-                              return h('option', { key: p.id, value: p.id, disabled: !details.isAvailable }, `${p.name} ${isRec ? '⭐ [Empfohlen]' : ''} ${!details.isAvailable ? `(${details.reason})` : ''}`);
+                              return h('div', { key: p.id, className: 'flex justify-between items-center gap-2 text-[10px]' },
+                                h('button', {
+                                  onClick: details.isAvailable ? () => setSchedule(schedule.map(t => t.id === task.id ? { ...t, assignedPersonId: isAssigned ? null : p.id, assignedBy: isAssigned ? null : 'manual', updatedAt: Date.now() } : t)) : undefined,
+                                  disabled: !details.isAvailable,
+                                  className: `px-1.5 py-0.5 rounded border font-bold truncate max-w-[60%] text-left ${!details.isAvailable ? 'bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed' : isAssigned ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-700 border-slate-300 hover:bg-indigo-50 hover:border-indigo-300'}`,
+                                  title: !details.isAvailable ? details.reason : (isAssigned ? 'Klicken, um Zuteilung zu entfernen' : 'Klicken, um diese Person zuzuteilen')
+                                },
+                                  `${isAssigned ? '✓ ' : ''}${isRec && !isAssigned ? '⭐ ' : ''}${p.name}`
+                                ),
+                                h('span', { className: `truncate text-right ${details.isAvailable ? 'text-emerald-600' : 'text-rose-500 font-medium'}` }, details.isAvailable ? 'verfügbar' : details.reason)
+                              );
                             })
                           )
                       );
