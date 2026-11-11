@@ -9,23 +9,23 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>Monatsplaner & Aufgabenverteiler</title>
   <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="tailwind-3.4.16.js" integrity="sha384-mS5Uq7sE90lgbBDN8xgf34ibEgbZo4gB3tfLY40ZRle+M188BQw8onzNHg6GUZaA"></script>
   <!-- React & ReactDOM -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1"></script>
   <!-- Mammoth.js for DOCX -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" crossorigin="anonymous" integrity="sha384-nFoSjZIoH3CCp8W639jJyQkuPHinJ2NHe7on1xvlUA7SuGfJAfvMldrsoAVm6ECz"></script>
   <!-- PDF.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js" crossorigin="anonymous" integrity="sha384-uLiAv4VcjM5H2Jsqzl8EajEaxPugj1CIzQaCjQ8c5//vC+elhxO5pZfXGxoLQi1W"></script>
   <script>
     if (window.pdfjsLib) {
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     }
   </script>
   <!-- PeerJS (WebRTC Data Channels) -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" crossorigin="anonymous" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR"></script>
   <!-- QRCode -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU"></script>
   <style>
     @media print {
       body { background: white !important; color: black !important; font-size: 11pt; }
@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.9.7';
+    const APP_VERSION = '1.9.9';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -243,6 +243,16 @@
       }
       return false;
     }
+
+    // ---------- Sync-Handshake: Schlüssel = Code + Geheimtoken ----------
+    const generateSyncToken = () => {
+      const bytes = new Uint8Array(24);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('').slice(0, 32);
+    };
+    const isHelloValid = (msg, token) => !!msg && typeof msg === 'object' && msg.type === 'hello' && typeof msg.token === 'string' && msg.token.length > 0 && msg.token === token;
+    const isSyncEnvelope = (msg) => !!msg && typeof msg === 'object' && msg.type === 'sync' && !!msg.data;
+    const syncKeyOf = (code, token) => `${code}.${token}`;
 
     const INITIAL_LOCATIONS = [
       { id: 'loc-1', name: 'Hauptgebäude' },
@@ -536,7 +546,7 @@
       const getPairing = () => {
         try {
           const data = JSON.parse(localStorage.getItem(PAIRING_KEY));
-          return data && data.role && data.code ? data : null;
+          return data && data.role && data.code && data.token ? data : null;
         } catch (err) {
           return null;
         }
@@ -558,41 +568,58 @@
         addSyncLog('info', 'Verbindung getrennt und Kopplung gelöscht');
       };
 
-      const scheduleReconnect = (role, code, delay = 10000) => {
+      const scheduleReconnect = (role, code, token, delay = 10000) => {
         if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
         reconnectAttemptsRef.current += 1;
         connectTimerRef.current = setTimeout(() => {
           connectTimerRef.current = null;
           const pairing = getPairing();
-          if (!pairing || pairing.role !== role || pairing.code !== code) return;
+          if (!pairing || pairing.role !== role || pairing.code !== code || pairing.token !== token) return;
           if (reconnectAttemptsRef.current % 5 === 1) {
             addSyncLog('info', `Automatischer Wiederverbindungsversuch (Code ${code})…`);
           }
           if (reconnectAttemptsRef.current === 6) {
             addSyncLog('info', 'Gegenstelle weiterhin nicht erreichbar – prüfe auf dem anderen Gerät, ob der Geräte-Sync läuft und welcher Code dort angezeigt wird.');
           }
-          establishSync(role, code);
+          establishSync(role, code, token);
         }, delay);
       };
 
-      const attachConnHandlers = (conn) => {
+      const attachConnHandlers = (conn, token) => {
+        conn.__verified = false;
         conn.on('open', () => {
           reconnectAttemptsRef.current = 0;
-          setSync(s => (s ? { ...s, status: 'connected' } : s));
-          addSyncLog('info', 'Verbindung hergestellt – Anfangsabgleich läuft');
-          conn.send(collectSyncData());
+          setSync(s => (s ? { ...s, status: 'connecting' } : s));
+          addSyncLog('info', 'Verbindung hergestellt – Gegenstelle wird authentifiziert…');
+          conn.send({ type: 'hello', token });
         });
-        conn.on('data', (data) => applySyncData(data));
+        conn.on('data', (data) => {
+          if (!conn.__verified) {
+            if (isHelloValid(data, token)) {
+              conn.__verified = true;
+              setSync(s => (s ? { ...s, status: 'connected' } : s));
+              addSyncLog('info', 'Gegenstelle authentifiziert – Anfangsabgleich läuft');
+              conn.send({ type: 'sync', data: collectSyncData() });
+            } else {
+              if (syncConnRef.current === conn) syncConnRef.current = null;
+              addSyncLog('info', '⚠ Verbindungsversuch mit ungültigem Schlüssel abgewiesen.');
+              setSync(s => (s ? { ...s, status: s.role === 'host' ? 'waiting' : 'error', message: s.role === 'host' ? undefined : 'Authentifizierung fehlgeschlagen – bitte vollständigen Schlüssel prüfen.' } : s));
+              try { conn.close(); } catch (err) {}
+            }
+            return;
+          }
+          if (isSyncEnvelope(data)) applySyncData(data.data);
+        });
         conn.on('close', () => {
           if (syncConnRef.current !== conn) return;
           setSync(s => (s && s.status === 'connected' ? { ...s, status: 'closed' } : s));
           addSyncLog('info', 'Verbindung getrennt – automatischer Wiederaufbau läuft…');
           const pairing = getPairing();
-          if (pairing) scheduleReconnect(pairing.role, pairing.code, 3000);
+          if (pairing) scheduleReconnect(pairing.role, pairing.code, pairing.token, 3000);
         });
       };
 
-      const establishSync = (role, code) => {
+      const establishSync = (role, code, token) => {
         if (typeof Peer === 'undefined') {
           showToast('PeerJS nicht geladen – bitte Internetverbindung prüfen.', 'error');
           return;
@@ -606,7 +633,7 @@
               setSync(s => (s ? { ...s, status: 'connecting' } : s));
               const newConn = existingPeer.connect(SYNC_PREFIX + code, { reliable: true });
               syncConnRef.current = newConn;
-              attachConnHandlers(newConn);
+              attachConnHandlers(newConn, token);
             }
             return;
           }
@@ -615,7 +642,7 @@
         } else if (existingPeer) {
           teardownSync();
         }
-        setSync({ role, code, status: role === 'host' ? 'waiting' : 'connecting' });
+        setSync({ role, code, token, status: role === 'host' ? 'waiting' : 'connecting' });
         const peerOptions = {
           config: {
             iceServers: [
@@ -634,7 +661,7 @@
             if (syncConnRef.current && !syncConnRef.current.destroyed && syncConnRef.current.open) return;
             const conn = peer.connect(SYNC_PREFIX + code, { reliable: true });
             syncConnRef.current = conn;
-            attachConnHandlers(conn);
+            attachConnHandlers(conn, token);
           }
         });
         if (role === 'host') {
@@ -643,7 +670,7 @@
               try { syncConnRef.current.close(); } catch (err) {}
             }
             syncConnRef.current = conn;
-            attachConnHandlers(conn);
+            attachConnHandlers(conn, token);
           });
         }
         peer.on('disconnected', () => {
@@ -657,7 +684,7 @@
             msg = 'Kein Gerät mit diesem Code gefunden.';
             const pairing = getPairing();
             if (pairing) {
-              scheduleReconnect(pairing.role, pairing.code);
+              scheduleReconnect(pairing.role, pairing.code, pairing.token);
               addSyncLog('info', `${msg} – automatischer Wiederholungsversuch folgt.`);
               setSync(s => (s ? { ...s, status: 'connecting' } : s));
               return;
@@ -669,73 +696,77 @@
           setSync(s => (s ? { ...s, status: 'error', message: msg } : s));
           const pairing = getPairing();
           if (pairing && (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed' || err.type === 'unavailable-id')) {
-            scheduleReconnect(pairing.role, pairing.code);
+            scheduleReconnect(pairing.role, pairing.code, pairing.token);
           }
         });
       };
 
       const startSyncHost = () => {
         const existing = getPairing();
-        const reuseCode = existing && existing.role === 'host' && /^\d{8}$/.test(existing.code);
-        const code = reuseCode ? existing.code : String(Math.floor(10000000 + Math.random() * 90000000));
-        localStorage.setItem(PAIRING_KEY, JSON.stringify({ role: 'host', code }));
+        const reuse = existing && existing.role === 'host' && /^\d{8}$/.test(existing.code) && existing.token;
+        const code = reuse ? existing.code : String(Math.floor(10000000 + Math.random() * 90000000));
+        const token = reuse ? existing.token : generateSyncToken();
+        localStorage.setItem(PAIRING_KEY, JSON.stringify({ role: 'host', code, token }));
         reconnectAttemptsRef.current = 0;
-        addSyncLog('info', `Sync gestartet – warte auf zweites Gerät (Code ${code}${reuseCode ? ', bisheriger Code beibehalten' : ''}). Kopplung wird dauerhaft gespeichert.`);
-        establishSync('host', code);
+        addSyncLog('info', `Sync gestartet – warte auf zweites Gerät (Code ${code}${reuse ? ', bisheriger Schlüssel beibehalten' : ', neuer Schlüssel erzeugt'}). Kopplung wird dauerhaft gespeichert.`);
+        establishSync('host', code, token);
       };
 
       const connectSyncAsClient = (e) => {
         if (e) e.preventDefault();
-        if (!/^\d{8}$/.test(syncCodeInput)) {
-          showToast('Bitte einen 8-stelligen Sync-Code eingeben.', 'error');
+        const m = /^(\d{8})[.\-:_ ]+([a-z0-9]{10,})$/i.exec(syncCodeInput.trim());
+        if (!m) {
+          showToast('Bitte den vollständigen Schlüssel eingeben (Code.Schlüssel – QR-Code scannen oder Schlüssel kopieren).', 'error');
           return;
         }
-        localStorage.setItem(PAIRING_KEY, JSON.stringify({ role: 'client', code: syncCodeInput }));
+        const code = m[1];
+        const token = m[2];
+        localStorage.setItem(PAIRING_KEY, JSON.stringify({ role: 'client', code, token }));
         reconnectAttemptsRef.current = 0;
-        addSyncLog('info', `Verbinde mit Code ${syncCodeInput}… Kopplung wird dauerhaft gespeichert.`);
-        establishSync('client', syncCodeInput);
+        addSyncLog('info', `Verbinde mit Code ${code}… Kopplung wird dauerhaft gespeichert.`);
+        establishSync('client', code, token);
       };
 
       const copySyncCode = async () => {
-        if (!sync?.code) return;
+        if (!sync?.code || !sync?.token) return;
         try {
-          await navigator.clipboard.writeText(sync.code);
-          showToast('Sync-Code kopiert!', 'success');
+          await navigator.clipboard.writeText(syncKeyOf(sync.code, sync.token));
+          showToast('Schlüssel kopiert!', 'success');
         } catch (err) {
           const ta = document.createElement('textarea');
-          ta.value = sync.code;
+          ta.value = syncKeyOf(sync.code, sync.token);
           document.body.appendChild(ta);
           ta.select();
           document.execCommand('copy');
           ta.remove();
-          showToast('Sync-Code kopiert!', 'success');
+          showToast('Schlüssel kopiert!', 'success');
         }
       };
 
       const pasteSyncCode = async () => {
         try {
           const text = await navigator.clipboard.readText();
-          const digits = (text || '').replace(/\D/g, '').slice(0, 8);
-          if (digits) setSyncCodeInput(digits);
-          else showToast('Zwischenablage enthält keinen Code.', 'error');
+          const m = /(\d{8})[.\-:_ ]*([a-z0-9]{10,})/i.exec(text || '');
+          if (m) setSyncCodeInput(`${m[1]}.${m[2]}`);
+          else showToast('Zwischenablage enthält keinen gültigen Schlüssel.', 'error');
         } catch (err) {
-          showToast('Zwischenablage nicht verfügbar – bitte Code manuell eingeben.', 'error');
+          showToast('Zwischenablage nicht verfügbar – bitte Schlüssel manuell eingeben.', 'error');
         }
       };
 
       useEffect(() => {
         if (syncOpen && sync && sync.role === 'host' && sync.code && qrRef.current && typeof QRCode !== 'undefined') {
           qrRef.current.innerHTML = '';
-          new QRCode(qrRef.current, { text: sync.code, width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
+          new QRCode(qrRef.current, { text: syncKeyOf(sync.code, sync.token), width: 132, height: 132, correctLevel: QRCode.CorrectLevel.M });
         }
       }, [syncOpen, sync]);
 
       // Automatische Synchronisierung: Bei jeder Datenänderung den Stand an das verbundene Gerät senden
       useEffect(() => {
-        if (!syncConnRef.current || !syncConnRef.current.open || suppressSendRef.current) return;
+        if (!syncConnRef.current || !syncConnRef.current.open || !syncConnRef.current.__verified || suppressSendRef.current) return;
         const timer = setTimeout(() => {
-          if (syncConnRef.current && syncConnRef.current.open && !suppressSendRef.current) {
-            syncConnRef.current.send(collectSyncData());
+          if (syncConnRef.current && syncConnRef.current.open && syncConnRef.current.__verified && !suppressSendRef.current) {
+            syncConnRef.current.send({ type: 'sync', data: collectSyncData() });
             addSyncLog('gesendet', 'Änderungen automatisch übertragen');
           }
         }, 500);
@@ -747,7 +778,15 @@
         const pairing = getPairing();
         if (pairing) {
           addSyncLog('info', `Gespeicherte Kopplung gefunden (Code ${pairing.code}) – Verbindung wird wiederhergestellt…`);
-          establishSync(pairing.role, pairing.code);
+          establishSync(pairing.role, pairing.code, pairing.token);
+        } else {
+          try {
+            const legacy = JSON.parse(localStorage.getItem(PAIRING_KEY));
+            if (legacy && legacy.role && legacy.code) {
+              localStorage.removeItem(PAIRING_KEY);
+              addSyncLog('info', 'Alte Kopplung ist durch das Sicherheits-Update ungültig – bitte die Geräte neu koppeln.');
+            }
+          } catch (err) {}
         }
         return () => {
           if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
@@ -764,7 +803,7 @@
             addSyncLog('info', 'Netzwerk zurück – Signaling wird sofort neu aufgebaut…');
             try { peer.reconnect(); } catch (err) {}
           } else if ((!peer || peer.destroyed) && !connectTimerRef.current) {
-            scheduleReconnect(pairing.role, pairing.code, 1000);
+            scheduleReconnect(pairing.role, pairing.code, pairing.token, 1000);
           }
         };
         const onVisible = () => { if (document.visibilityState === 'visible') tryImmediateReconnect(); };
@@ -1456,8 +1495,9 @@
               h('p', { className: 'text-xs font-semibold text-indigo-700' }, 'Warte auf das zweite Gerät…'),
               h('div', { ref: qrRef, className: 'flex justify-center' }),
               h('div', { className: 'text-2xl font-mono font-bold tracking-[0.3em] text-slate-800' }, sync.code),
-              h('button', { onClick: copySyncCode, className: 'w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg' }, '📋 Code kopieren'),
-              h('p', { className: 'text-[10px] text-slate-500' }, 'Auf dem zweiten Gerät „Mit Code verbinden“ wählen und den Code eingeben oder einfügen.')
+              h('div', { className: 'text-[10px] font-mono text-slate-500 break-all select-all' }, syncKeyOf(sync.code, sync.token)),
+              h('button', { onClick: copySyncCode, className: 'w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg' }, '📋 Schlüssel kopieren'),
+              h('p', { className: 'text-[10px] text-slate-500' }, 'Auf dem zweiten Gerät „Mit Code verbinden“ wählen und den vollständigen Schlüssel (Code.Schlüssel) per QR-Scan, Einfügen oder Abtippen übertragen. Den Schlüssel nur mit dem eigenen zweiten Gerät teilen – er berechtigt zum Datenabgleich.')
             ) : null,
 
             sync && sync.status === 'connecting' ? h('div', { className: 'p-3 rounded-lg bg-indigo-50 border border-indigo-200 text-xs font-semibold text-indigo-700 text-center' }, `Verbinde mit Code ${sync.code}…${reconnectAttemptsRef.current > 1 ? ` (Versuch ${reconnectAttemptsRef.current})` : ''}`) : null,
@@ -1475,16 +1515,15 @@
                 h('form', { onSubmit: connectSyncAsClient, className: 'flex gap-2' },
                   h('input', {
                     type: 'text',
-                    inputMode: 'numeric',
-                    maxLength: 8,
-                    placeholder: '8-stelliger Code',
+                    maxLength: 90,
+                    placeholder: '12345678.schlüssel',
                     value: syncCodeInput,
-                    onChange: (e) => setSyncCodeInput(e.target.value.replace(/\D/g, '').slice(0, 8)),
-                    className: 'flex-1 text-sm p-2 border rounded-lg font-mono tracking-widest bg-white border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500'
+                    onChange: (e) => setSyncCodeInput(e.target.value.replace(/[^a-zA-Z0-9.\-:_ ]/g, '').slice(0, 90)),
+                    className: 'flex-1 text-sm p-2 border rounded-lg font-mono bg-white border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500'
                   }),
                   h('button', { type: 'submit', className: 'bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-4 rounded-lg' }, 'Verbinden')
                 ),
-                h('button', { onClick: pasteSyncCode, className: 'text-xs text-indigo-600 hover:underline font-semibold' }, '📋 Code aus Zwischenablage einfügen')
+                h('button', { onClick: pasteSyncCode, className: 'text-xs text-indigo-600 hover:underline font-semibold' }, '📋 Schlüssel aus Zwischenablage einfügen')
               ),
               h('p', { className: 'text-[10px] text-slate-500' }, 'Die Kopplung wird dauerhaft gespeichert: Beim nächsten Öffnen der App verbindet sich dieses Gerät automatisch wieder und synchronisiert im Hintergrund.')
             ) : null,

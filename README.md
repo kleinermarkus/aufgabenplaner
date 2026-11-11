@@ -78,8 +78,8 @@ Beim Aktualisieren einer neuen Version: `APP_VERSION` in `index.html` **und** `v
 
 Über den Button **🔄 Geräte-Sync** im Kopf können zwei Geräte direkt peer-to-peer synchronisiert werden:
 
-1. **Gerät 1:** „Sync starten“ erzeugt einen 8-stelligen Sync-Code – angezeigt als **QR-Code** und als **Text mit Kopieren-Button** (📋 Code kopieren).
-2. **Gerät 2:** „Mit Code verbinden“ – den Code ins Textfeld **eingeben oder per Zwischenablage einfügen** (📋 Code aus Zwischenablage einfügen) und verbinden.
+1. **Gerät 1:** „Sync starten“ erzeugt einen 8-stelligen Sync-Code **plus Geheimtoken** – angezeigt als **QR-Code** und als **Text mit Kopieren-Button** (📋 Schlüssel kopieren).
+2. **Gerät 2:** „Mit Code verbinden“ – den vollständigen Schlüssel (`Code.Token`) ins Textfeld **eingeben oder per Zwischenablage einfügen** (📋 Schlüssel aus Zwischenablage einfügen) und verbinden.
 3. **Automatische Live-Synchronisierung:** Nach dem ersten Abgleich werden alle Änderungen automatisch in beide Richtungen übertragen – solange beide Geräte die App geöffnet haben.
 
 ### Dauerhafte Kopplung
@@ -103,7 +103,13 @@ Der Handshake läuft über das öffentliche PeerJS-Signaling; die Plandaten selb
 
 **Zusammenführung:** Beide Datensätze werden vereinigt (union by id) – neue Einträge vom anderen Gerät werden übernommen. **Termine (inkl. Zuteilungen) werden nach dem Last-Update-wins-Prinzip abgeglichen:** Die jeweils zuletzt gemachte Änderung (neuerer Zeitstempel) setzt sich auf beiden Geräten durch. Wird ein gelöschter Termin danach neu angelegt oder geändert (z. B. durch erneutes Termine generieren), belebt er die Lösch-Markierung wieder. Bei Personen werden Abwesenheiten vereinigt, Matrix-Häkchen kombiniert (aktiv gewinnt) und der Schichtrhythmus übernommen, falls lokal keiner gesetzt ist.
 
-**Verlässlichkeit:** Der Empfang ist idempotent – mehrfach übertragene identische Daten ändern nichts und erzeugen keine Protokoll-Einträge. Bricht die Datenverbindung ab, wird sie automatisch (alle paar Sekunden) neu aufgebaut, ohne dass die Kopplung verloren geht. Bei einem **Versionsunterschied** zwischen den Geräten erscheint eine klare Warnung im Sync-Protokoll.
+### Sicherheit
+
+- **Authentifizierungs-Handshake:** Der Schlüssel besteht aus dem sichtbaren Code **und einem geheimen Token** (QR-Code/Text enthalten beides). Vor dem ersten Datenabgleich prüfen beide Geräte das Token – Verbindungsversuche mit ungültigem Schlüssel werden abgewiesen und im Protokoll vermerkt. Ohne gültigen Schlüssel werden keine Daten übertragen.
+- **Schlüssel wie ein Passwort behandeln:** Nur mit dem eigenen zweiten Gerät teilen. Bei Verdacht auf Missbrauch auf beiden Geräten „Kopplung löschen“ und neu koppeln (das erzeugt ein neues Token).
+- **Integrität der Bibliotheken (SRI):** Alle externen Skripte (React, ReactDOM, Mammoth, PDF.js, PeerJS, QRCode) sind auf feste Versionen gepinnt und mit Subresource-Integrity-Hashes abgesichert; Tailwind wird lokal ausgeliefert (`tailwind-3.4.16.js`, ebenfalls per SRI geprüft). Manipulierte CDN-Auslieferungen werden vom Browser blockiert.
+
+**Verlässlichkeit:** Der Empfang ist idempotent – mehrfach übertragene identische Daten ändern nichts und erzeugen keine Protokoll-Einträge. Bricht die Datenverbindung ab, wird sie automatisch (alle paar Sekunden) neu aufgebaut, ohne dass die Kopplung verloren geht. Nach dem Update auf die Handshake-Version müssen einmal gekoppelte Geräte **einmalig neu gekoppelt** werden (die alte Kopplung wird automatisch entfernt). Bei einem **Versionsunterschied** zwischen den Geräten erscheint eine klare Warnung im Sync-Protokoll.
 
 **Wichtig:** Damit Änderungen korrekt abgeglichen werden, sollte auf **beiden Geräten die gleiche App-Version** (mindestens 1.8.1) laufen.
 
