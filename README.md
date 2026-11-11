@@ -5,7 +5,7 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 ## Funktionsübersicht
 
 ### 📅 Planer & Kalender
-- **Monatskalender** mit Feiertagen (Bundesland einstellbar), farbigen Namens-Chips (mobil als Akronym) und mitwachsenden Zellen bei mehreren Terminen pro Tag; Gruppentermine zeigen links einen Ein-Buchstaben-Chip je Gruppe (unterscheidendes Wort, z. B. „Gruppe Nord“ → „N“); ohne Zuteilung steht dort der Gruppenname bzw. bei mehreren Gruppen „Gruppen“ (mobil Kürzel, indigo-farben)
+- **Monatskalender** mit Feiertagen (Bundesland einstellbar), farbigen Namens-Chips (mobil als Akronym) und mitwachsenden Zellen bei mehreren Terminen pro Tag; Gruppentermine zeigen links einen Ein-Buchstaben-Chip je Gruppe (unterscheidendes Wort, z. B. „Gruppe Nord“ → „N“); ohne Zuteilung steht dort der Gruppenname bzw. bei mehreren Gruppen „Gruppen“ (mobil Kürzel); unbesetzte Termine erscheinen durchgehend rot
 - **Tag antippen** → Aufgaben-Panel rechts: „+ Aufgabe anlegen", Zeitslot/Ort ändern, **Gruppen-Chips direkt am Termin umschalten**, ⭐ **Empfehlung** anklickbar, Verfügbarkeits-Liste mit Klick-Zuteilung und **Grundangaben** bei Sperren (Abwesend, Schicht, Qualifikation, Gruppe)
 - **📅 Datum ändern** – jeden geplanten Termin direkt im Panel verschieben (Datumsfeld am Termin); der Kalender springt zum neuen Tag, Kollisionen zur gleichen Zeit werden abgefangen. Bei Wechsel des Wochentags fragt ein Banner, ob ein vorhandener Zeitslot des neuen Wochentags genutzt (mit Anzahl qualifizierter Personen) oder ein neuer Zeitslot angelegt werden soll – so bleiben die Qualifikationsprüfungen korrekt; ist die aktuell zugeteilte Person für den neuen Zeitslot nicht qualifiziert, gibt es einen Warnhinweis
 - **1. Termine generieren (vollst. KW)** – legt alle wiederkehrenden Termine des Monats an (inkl. Gruppentermine), mit Duplikatschutz auch über Monatswechsel hinweg
@@ -15,7 +15,7 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 - **Monatstermine löschen** – alle Termine des angezeigten Monats entfernen
 
 ### 👥 Personen & Matrix
-- **Personen anlegen/verwalten** (Name, Farbe automatisch)
+- **Personen anlegen/verwalten** (Name; jede erhält automatisch eine **eindeutige Farbe**, keine zwei Personen teilen sich einen Farbton)
 - **Qualifikations-Matrix**: Pro Person × Zeitslot × Ort, wer kann was übernehmen
 - **Abwesenheiten**: Pro Person manuell (Start/Ende, Grund) oder **Import aus PDF/DOCX**
 - **Externes Schichtsystem (Rotation)**: Startdatum + beliebiger Rhythmus aus Früh/Spät/Nacht/frei (F/S/N/–), Vorschau der nächsten 7 Tage; Schichten blockieren automatisch (Früh 06–14, Spät 14–22, Nacht 22–06 + Folgetag bis 14 Uhr)
@@ -61,7 +61,7 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 
 Beim **automatischen Termine generieren** wird geprüft, ob zur gleichen Zeit (gleiches Datum + gleiche Uhrzeit, unabhängig von Zeitslot-ID und Ort) bereits ein Termin existiert – auch in überlappenden Kalenderwochen beim Monatswechsel und innerhalb eines Durchlaufs. So entstehen keine Doppel-Termine.
 
-Im Monats-Kalender genügt ein **Tipp/Antippen auf den Tag**, um ihn auszuwählen – rechts im Aufgaben-Panel liegt dann die Schaltfläche **„+ Aufgabe anlegen“** für diesen Tag (ein extra „+ Aufgabe“-Button in jeder Zelle gibt es nicht mehr). Jede Aufgabe zeigt den zugeteilten Namen als **farbigen Chip** – jede Person hat eine feste Farbe, Zuteilungen sind so auf einen Blick erkennbar (mobil und am Desktop). Auf schmalen mobilen Zellen wird im Chip statt des Namens nur das **Akronym (Anfangsbuchstaben)** angezeigt, darunter klein die Uhrzeit – nichts wird mehr mit „…“ abgeschnitten; der volle Name steht im Tooltip bzw. nach dem Antippen des Tags im Aufgaben-Panel. Unbesetzte Aufgaben erscheinen rot („Offen"). Die Kalenderzellen **wachsen automatisch mit**, wenn an einem Tag mehrere Termine zusammenkommen – in den Zellen muss nicht mehr gescrollt werden.
+Im Monats-Kalender genügt ein **Tipp/Antippen auf den Tag**, um ihn auszuwählen – rechts im Aufgaben-Panel liegt dann die Schaltfläche **„+ Aufgabe anlegen“** für diesen Tag (ein extra „+ Aufgabe“-Button in jeder Zelle gibt es nicht mehr). Jede Aufgabe zeigt den zugeteilten Namen als **farbigen Chip** – jede Person hat eine feste Farbe, Zuteilungen sind so auf einen Blick erkennbar (mobil und am Desktop). Auf schmalen mobilen Zellen wird im Chip statt des Namens nur das **Akronym (Anfangsbuchstaben)** angezeigt, darunter klein die Uhrzeit – nichts wird mehr mit „…“ abgeschnitten; der volle Name steht im Tooltip bzw. nach dem Antippen des Tags im Aufgaben-Panel. Unbesetzte Aufgaben erscheinen rot („Offen") – auch Gruppentermine ohne Zuteilung; Rot ist damit immer ein Hinweis auf fehlende Besetzung. Jede Person hat eine **feste, eindeutige Farbe** (kollisionsfrei, auf allen Geräten identisch). Die Kalenderzellen **wachsen automatisch mit**, wenn an einem Tag mehrere Termine zusammenkommen – in den Zellen muss nicht mehr gescrollt werden.
 
 Im Tab **⚙️ Stammdaten & Export** lässt sich das **Bundesland für die Feiertage** wählen – der Kalender zeigt dann die dortigen gesetzlichen Feiertage (inkl. der länderspezifischen wie Fronleichnam, Allerheiligen, Weltkindertag o. Ä.). Die Einstellung wird pro Gerät gespeichert.
 

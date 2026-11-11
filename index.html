@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.10';
+    const APP_VERSION = '1.10.11';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -64,22 +64,49 @@
     const SHIFT_CYCLE_ORDER = ['frei', 'frueh', 'spaet', 'nacht'];
     const DEFAULT_SHIFT_CYCLE = ['frueh', 'frueh', 'spaet', 'spaet', 'nacht', 'nacht', 'frei', 'frei'];
 
-    // Feste Farbe pro Person, damit Zuteilungen im Kalender sofort erkennbar sind
+    // Feste, eindeutige Farbe pro Person: Kollisionen werden deterministisch aufgeloest,
+    // rote Toene sind reserviert fuer unbesetzte Termine
     const PERSON_COLORS = [
       'bg-indigo-100 text-indigo-900 border-indigo-300',
       'bg-emerald-100 text-emerald-900 border-emerald-300',
       'bg-amber-100 text-amber-900 border-amber-300',
       'bg-sky-100 text-sky-900 border-sky-300',
-      'bg-rose-100 text-rose-900 border-rose-300',
       'bg-violet-100 text-violet-900 border-violet-300',
       'bg-teal-100 text-teal-900 border-teal-300',
-      'bg-orange-100 text-orange-900 border-orange-300'
+      'bg-orange-100 text-orange-900 border-orange-300',
+      'bg-lime-100 text-lime-900 border-lime-300',
+      'bg-cyan-100 text-cyan-900 border-cyan-300',
+      'bg-fuchsia-100 text-fuchsia-900 border-fuchsia-300',
+      'bg-pink-100 text-pink-900 border-pink-300',
+      'bg-yellow-100 text-yellow-900 border-yellow-300',
+      'bg-green-100 text-green-900 border-green-300',
+      'bg-blue-100 text-blue-900 border-blue-300',
+      'bg-purple-100 text-purple-900 border-purple-300',
+      'bg-stone-100 text-stone-900 border-stone-300',
+      'bg-slate-100 text-slate-900 border-slate-300',
+      'bg-zinc-100 text-zinc-900 border-zinc-300'
     ];
-    const getPersonColor = (id) => {
-      if (!id) return 'bg-slate-100 text-slate-700 border-slate-300';
+    const personColorHash = (id) => {
       let hash = 0;
       for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-      return PERSON_COLORS[hash % PERSON_COLORS.length];
+      return hash;
+    };
+    const getPersonColor = (id) => {
+      if (!id) return 'bg-slate-100 text-slate-700 border-slate-300';
+      return PERSON_COLORS[personColorHash(id) % PERSON_COLORS.length];
+    };
+    const buildPersonColorMap = (peopleList) => {
+      const used = new Set();
+      const map = {};
+      [...peopleList].sort((a, b) => a.id.localeCompare(b.id)).forEach(p => {
+        let idx = personColorHash(p.id) % PERSON_COLORS.length;
+        if (used.size < PERSON_COLORS.length) {
+          while (used.has(idx)) idx = (idx + 1) % PERSON_COLORS.length;
+          used.add(idx);
+        }
+        map[p.id] = PERSON_COLORS[idx];
+      });
+      return map;
     };
     const getInitials = (name) => {
       if (!name) return '?';
@@ -1001,6 +1028,8 @@
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
       const holidays = useMemo(() => getGermanHolidays(year, bundesland), [year, bundesland]);
+      const personColorMap = useMemo(() => buildPersonColorMap(people), [people]);
+      const getPersonColorById = (id) => (id && personColorMap[id]) || getPersonColor(id);
 
       const getPersonAvailabilityDetails = (person, slotId, locationId, dateStr, groupIds) => {
         const slot = timeSlots.find(s => s.id === slotId);
@@ -1644,7 +1673,7 @@
                 const slot = timeSlots.find(s => s.id === t.slotId);
                 const person = people.find(p => p.id === t.assignedPersonId);
                 const taskGroupNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
-                return h('div', { key: t.id, className: `p-1 rounded border flex items-center gap-1 min-w-0 ${person ? getPersonColor(person.id) : 'bg-rose-50 border-rose-300'}` },
+                return h('div', { key: t.id, className: `p-1 rounded border flex items-center gap-1 min-w-0 ${person ? getPersonColorById(person.id) : 'bg-red-50 border-red-300 text-red-700'}` },
                   taskGroupNames.length > 0 ? taskGroupNames.map((gn, gi) => h('span', { key: gi, title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-indigo-600 text-white rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, groupLetter(gn))) : null,
                   h('span', { className: 'text-[9px] font-bold opacity-90 shrink-0' }, slot?.time || ''),
                   h('div', { className: 'min-w-0 flex-1 leading-tight' },
@@ -1664,7 +1693,7 @@
                 return h('div', {
                   key: t.id,
                   title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : (taskGroupNames.length > 0 ? `Gruppentermin: ${taskGroupNames.join(', ')}` : 'Offen'),
-                  className: `px-0.5 py-0.5 rounded border text-center leading-none ${person ? getPersonColor(person.id) : (taskGroupNames.length > 0 ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-rose-50 border-rose-300 text-rose-700')}`
+                  className: `px-0.5 py-0.5 rounded border text-center leading-none ${person ? getPersonColorById(person.id) : 'bg-red-50 border-red-300 text-red-700'}`
                 },
                   h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : (taskGroupNames.length > 1 ? 'Gruppen' : (taskGroupNames.length === 1 ? taskGroupInitials : 'Offen'))),
                   slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null,
