@@ -45,7 +45,9 @@ Beim Aktualisieren einer neuen Version: `APP_VERSION` in `index.html` **und** `v
 Die Sync-Verbindung wird **dauerhaft gespeichert**:
 
 - Beim nächsten Öffnen der App verbindet sich das Gerät **automatisch wieder** mit dem gekoppelten Gerät – kein erneuter Code-Austausch.
-- Bricht die Verbindung ab (z. B. Netzwerkwechsel, das andere Gerät ist offline), wird **automatisch alle 10 Sekunden** erneut verbunden, bis es wieder klappt.
+- Der **Sync-Code des wartenden Geräts bleibt erhalten**: Wird der Sync erneut gestartet, wird der bisherige Code weiterverwendet – das andere Gerät kann sich also weiterhin mit dem bekannten Code verbinden.
+- Bricht die Verbindung ab (z. B. Netzwerkwechsel, das andere Gerät ist offline), wird **automatisch alle 10 Sekunden** erneut verbunden, bis es wieder klappt. Nach Netzwerk-Rückkehr oder App-Aktivierung (z. B. nach dem Schlafmodus) wird sofort neu verbunden.
+- Für Verbindungen über Mobilfunk oder strenge Firewalls werden zusätzlich **TURN-Relay-Server** verwendet, wenn eine Direktverbindung nicht möglich ist.
 - Status im Kopf: **🟢 Sync aktiv** (verbunden), **🟡 Sync verbindet…** (Wiederverbindungsversuch läuft) oder **🔄 Geräte-Sync** (nicht gekoppelt).
 - Die Kopplung lösen: **🔌 Verbindung trennen (Kopplung löschen)** im Sync-Dialog.
 

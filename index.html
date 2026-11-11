@@ -42,7 +42,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.5.0';
+    const APP_VERSION = '1.5.1';
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
@@ -397,6 +397,9 @@
           if (reconnectAttemptsRef.current % 5 === 1) {
             addSyncLog('info', `Automatischer Wiederverbindungsversuch (Code ${code})…`);
           }
+          if (reconnectAttemptsRef.current === 6) {
+            addSyncLog('info', 'Gegenstelle weiterhin nicht erreichbar – prüfe auf dem anderen Gerät, ob der Geräte-Sync läuft und welcher Code dort angezeigt wird.');
+          }
           establishSync(role, code);
         }, delay);
       };
@@ -424,7 +427,18 @@
         }
         if (syncPeerRef.current) return;
         setSync({ role, code, status: role === 'host' ? 'waiting' : 'connecting' });
-        const peer = role === 'host' ? new Peer(SYNC_PREFIX + code) : new Peer();
+        const peerOptions = {
+          config: {
+            iceServers: [
+              { urls: 'stun:stun.l.google.com:19302' },
+              { urls: 'stun:stun1.l.google.com:19302' },
+              { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+              { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+              { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+            ]
+          }
+        };
+        const peer = role === 'host' ? new Peer(SYNC_PREFIX + code, peerOptions) : new Peer(peerOptions);
         syncPeerRef.current = peer;
         peer.on('open', () => {
           if (role === 'client') {
@@ -459,22 +473,24 @@
               return;
             }
           } else if (err.type === 'unavailable-id') {
-            msg = 'Code belegt – bitte erneut versuchen.';
+            msg = 'Code kurzzeitig belegt – automatischer neuer Versuch folgt…';
           }
           addSyncLog('info', `Fehler: ${msg}`);
           setSync(s => (s ? { ...s, status: 'error', message: msg } : s));
           const pairing = getPairing();
-          if (pairing && (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed')) {
+          if (pairing && (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error' || err.type === 'socket-closed' || err.type === 'unavailable-id')) {
             scheduleReconnect(pairing.role, pairing.code);
           }
         });
       };
 
       const startSyncHost = () => {
-        const code = String(Math.floor(10000000 + Math.random() * 90000000));
+        const existing = getPairing();
+        const reuseCode = existing && existing.role === 'host' && /^\d{8}$/.test(existing.code);
+        const code = reuseCode ? existing.code : String(Math.floor(10000000 + Math.random() * 90000000));
         localStorage.setItem(PAIRING_KEY, JSON.stringify({ role: 'host', code }));
         reconnectAttemptsRef.current = 0;
-        addSyncLog('info', `Sync gestartet – warte auf zweites Gerät (Code ${code}). Kopplung wird dauerhaft gespeichert.`);
+        addSyncLog('info', `Sync gestartet – warte auf zweites Gerät (Code ${code}${reuseCode ? ', bisheriger Code beibehalten' : ''}). Kopplung wird dauerhaft gespeichert.`);
         establishSync('host', code);
       };
 
@@ -545,6 +561,28 @@
         }
         return () => {
           if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
+        };
+      }, []);
+
+      // Netzwerk-Rückkehr / App-Aktivierung: Signaling sofort neu aufbauen, falls es gekappt wurde
+      useEffect(() => {
+        const tryImmediateReconnect = () => {
+          const pairing = getPairing();
+          if (!pairing) return;
+          const peer = syncPeerRef.current;
+          if (peer && !peer.destroyed && peer.disconnected) {
+            addSyncLog('info', 'Netzwerk zurück – Signaling wird sofort neu aufgebaut…');
+            try { peer.reconnect(); } catch (err) {}
+          } else if ((!peer || peer.destroyed) && !connectTimerRef.current) {
+            scheduleReconnect(pairing.role, pairing.code, 1000);
+          }
+        };
+        const onVisible = () => { if (document.visibilityState === 'visible') tryImmediateReconnect(); };
+        window.addEventListener('online', tryImmediateReconnect);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+          window.removeEventListener('online', tryImmediateReconnect);
+          document.removeEventListener('visibilitychange', onVisible);
         };
       }, []);
 
@@ -1159,7 +1197,7 @@
               h('p', { className: 'text-[10px] text-slate-500' }, 'Auf dem zweiten Gerät „Mit Code verbinden“ wählen und den Code eingeben oder einfügen.')
             ) : null,
 
-            sync && sync.status === 'connecting' ? h('div', { className: 'p-3 rounded-lg bg-indigo-50 border border-indigo-200 text-xs font-semibold text-indigo-700 text-center' }, `Verbinde mit Code ${sync.code}…`) : null,
+            sync && sync.status === 'connecting' ? h('div', { className: 'p-3 rounded-lg bg-indigo-50 border border-indigo-200 text-xs font-semibold text-indigo-700 text-center' }, `Verbinde mit Code ${sync.code}…${reconnectAttemptsRef.current > 1 ? ` (Versuch ${reconnectAttemptsRef.current})` : ''}`) : null,
             sync && sync.status === 'connected' ? h('div', { className: 'p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700 text-center' }, '✅ Verbunden – Änderungen werden automatisch in beide Richtungen synchronisiert. Die Kopplung bleibt dauerhaft bestehen, auch nach dem Schließen oder Neuladen der App.') : null,
             sync && sync.status === 'closed' ? h('div', { className: 'p-3 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600 text-center' }, 'Verbindung getrennt – es wird automatisch wieder verbunden, sobald das andere Gerät erreichbar ist.') : null,
             sync && sync.status === 'error' ? h('div', { className: 'p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 text-center' }, sync.message || 'Verbindungsfehler.') : null,
