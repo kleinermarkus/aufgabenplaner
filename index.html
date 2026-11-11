@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.8';
+    const APP_VERSION = '1.10.9';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1019,6 +1019,12 @@
           return { isAvailable: false, reason: `Schicht: ${shiftBlock}` };
         }
 
+        // Wer an einem Tag einem Gruppentermin zugeteilt ist, wird an dem Tag nicht für allgemeine Termine eingeteilt
+        if (!Array.isArray(groupIds) || groupIds.length === 0) {
+          const busyWithGroup = schedule.some(t => t.dateStr === dateStr && t.assignedPersonId === person.id && Array.isArray(t.groupIds) && t.groupIds.length > 0);
+          if (busyWithGroup) return { isAvailable: false, reason: 'Gruppentermin an diesem Tag' };
+        }
+
         const matchSlot = timeSlots.find(s => s.dayOfWeek === slot.dayOfWeek && s.time === slot.time);
         if (!matchSlot) return { isAvailable: false, reason: 'Kein passender Slot' };
 
@@ -1044,12 +1050,11 @@
           if (!t.assignedPersonId || t.id === excludeTaskId || counts[t.assignedPersonId] === undefined) return;
           // Gruppen-Termine laufen außer Konkurrenz: Zuteilungen dort zählen in keiner Bilanz
           if (Array.isArray(t.groupIds) && t.groupIds.length > 0) return;
-          const isFuture = untilDateStr && t.dateStr > untilDateStr;
-          if (isFuture && t.assignedBy !== 'manual') return;
           counts[t.assignedPersonId]++;
           const taskDate = parseLocalDate(t.dateStr);
           const wDay = taskDate.getDay();
           weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
+          const isFuture = untilDateStr && t.dateStr > untilDateStr;
           if (!isFuture && (!lastAssignedDate[t.assignedPersonId] || t.dateStr > lastAssignedDate[t.assignedPersonId])) {
             lastAssignedDate[t.assignedPersonId] = t.dateStr;
           }
@@ -1234,13 +1239,12 @@
           return;
         }
 
-        // Fairness-Statistiken starten leer und werden chronologisch aufgebaut:
-        // nur bereits vergangene bzw. gleichzeitige Einsätze zählen, zukünftige nicht
+        // Fairness-Statistiken: alle vorhandenen Einteilungen zählen – Vergangenheit und Zukunft,
+        // manuell und automatisch; nur Gruppentermine laufen außer Konkurrenz
         const stats = buildAssignmentStats([], people, null, null);
-        // Manuell eingeteilte Termine (auch in der Zukunft) in die Bilanz einrechnen
         updatedSchedule.forEach(t => {
           if (Array.isArray(t.groupIds) && t.groupIds.length > 0) return;
-          if (t.assignedPersonId && t.assignedBy === 'manual' && stats.counts[t.assignedPersonId] !== undefined) {
+          if (t.assignedPersonId && stats.counts[t.assignedPersonId] !== undefined) {
             stats.counts[t.assignedPersonId]++;
             const wDay = parseLocalDate(t.dateStr).getDay();
             stats.weekdayCounts[t.assignedPersonId][wDay] = (stats.weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
@@ -1253,11 +1257,6 @@
           while (histIdx < updatedSchedule.length && updatedSchedule[histIdx].dateStr <= task.dateStr) {
             const hist = updatedSchedule[histIdx];
             if (hist.assignedPersonId && !(Array.isArray(hist.groupIds) && hist.groupIds.length > 0) && stats.counts[hist.assignedPersonId] !== undefined) {
-              if (hist.assignedBy !== 'manual') {
-                stats.counts[hist.assignedPersonId]++;
-                const wDay = parseLocalDate(hist.dateStr).getDay();
-                stats.weekdayCounts[hist.assignedPersonId][wDay] = (stats.weekdayCounts[hist.assignedPersonId][wDay] || 0) + 1;
-              }
               if (!stats.lastAssignedDate[hist.assignedPersonId] || hist.dateStr > stats.lastAssignedDate[hist.assignedPersonId]) {
                 stats.lastAssignedDate[hist.assignedPersonId] = hist.dateStr;
               }
