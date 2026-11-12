@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.21';
+    const APP_VERSION = '1.10.22';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1856,8 +1856,8 @@
               h('button', {
                 onClick: () => setSyncOpen(true),
                 title: syncConnected ? 'Geräte-Sync aktiv' : syncPending ? 'Geräte-Sync verbindet…' : 'Geräte-Sync öffnen',
-                className: `w-7 h-7 text-sm rounded-lg flex items-center justify-center ${syncConnected ? 'bg-emerald-600 hover:bg-emerald-700' : syncPending ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-900'}`
-              }, syncConnected ? '🟢' : syncPending ? '🟡' : '🔄')
+                className: `px-2 py-0.5 text-[11px] font-bold rounded-lg flex items-center gap-1 ${syncConnected ? 'bg-emerald-600 hover:bg-emerald-700' : syncPending ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-900'}`
+              }, (syncConnected ? '🟢' : syncPending ? '🟡' : '🔄') + ' Sync')
             )),
             h('p', { className: 'text-xs text-slate-500' }, 'Automatische gerechte Aufgabenverteilung & Feiertagsunterstützung')
           ),
