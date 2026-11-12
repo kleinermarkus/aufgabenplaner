@@ -31,6 +31,7 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 - **Orte** und **Zeitslots** verwalten (Wochentag + Uhrzeit)
 - **Gruppen verwalten**: Anlegen, Mitglieder zuordnen; Löschen entfernt die Gruppe aus allen Terminen/Mustern
 - **Bundesland** für die gesetzlichen Feiertage (16 Länder, Standard Sachsen)
+- **Ereignisse importieren** (DOCX/TXT): Zusätzliche Termine (z. B. Versammlungsereignisse) aus einer Datei einlesen – sie erscheinen wie Feiertage (violett) im Kalender, mit Titel, Uhrzeit und Ort; Zeitspannen (z. B. „09.-14. März") werden auf alle Tage verteilt; Liste mit Löschen-Möglichkeit
 - **Datensicherung**: Backup als JSON exportieren/importieren, **gesamte App als .html herunterladen**
 - **Gefahrenzone**: Alle Anwendungsdaten komplett löschen
 
@@ -53,6 +54,7 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 | `getPersonAvailabilityDetails` | Verfügbarkeit + Grund (Gruppe, Abwesenheit, Schicht, Qualifikation) |
 | `getExternalShiftBlock` | Schicht-Blockierung aus der Rotation pro Person |
 | `getGermanHolidays` / `GERMAN_STATES` | Feiertage je Bundesland |
+| `parseEventsFromText` / `handleEventsImport` | Ereignisse aus DOCX/TXT erkennen und importieren |
 | `collectSyncData` / `applySyncData` | Sync-Payload bauen / empfangen (idempotent, Tombstones, LWW via `mergeTasks`) |
 | `isHelloValid` / `isSyncEnvelope` / `generateSyncToken` | Sync-Handshake: Authentifizierung und Nachrichten-Umschläge |
 | `getPairing` / `establishSync` / `scheduleReconnect` | Dauerhafte Kopplung, Verbindungsaufbau, Auto-Reconnect |
@@ -61,9 +63,11 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 
 Beim **automatischen Termine generieren** wird geprüft, ob zur gleichen Zeit (gleiches Datum + gleiche Uhrzeit, unabhängig von Zeitslot-ID und Ort) bereits ein Termin existiert – auch in überlappenden Kalenderwochen beim Monatswechsel und innerhalb eines Durchlaufs. So entstehen keine Doppel-Termine.
 
-Im Monats-Kalender genügt ein **Tipp/Antippen auf den Tag**, um ihn auszuwählen – rechts im Aufgaben-Panel liegt dann die Schaltfläche **„+ Aufgabe anlegen“** für diesen Tag (ein extra „+ Aufgabe“-Button in jeder Zelle gibt es nicht mehr). Jede Aufgabe zeigt den zugeteilten Namen als **farbigen Chip** – jede Person hat eine feste Farbe, Zuteilungen sind so auf einen Blick erkennbar (mobil und am Desktop). Auf schmalen mobilen Zellen wird im Chip statt des Namens nur das **Akronym (Anfangsbuchstaben)** angezeigt, darunter klein die Uhrzeit – nichts wird mehr mit „…“ abgeschnitten; der volle Name steht im Tooltip bzw. nach dem Antippen des Tags im Aufgaben-Panel. Unbesetzte allgemeine Aufgaben erscheinen rot („Offen") – Rot ist damit immer ein Hinweis auf fehlende Besetzung. **Gruppentermine erscheinen immer blau** – bei mehreren Gruppen **dunkelblau** mit weißer Schrift –, unabhängig davon, ob eine Person eingeteilt ist. Jede Person hat außerdem eine **feste, eindeutige Farbe** (kollisionsfrei, auf allen Geräten identisch). Die Kalenderzellen **wachsen automatisch mit**, wenn an einem Tag mehrere Termine zusammenkommen – in den Zellen muss nicht mehr gescrollt werden.
+Im Monats-Kalender genügt ein **Tipp/Antippen auf den Tag**, um ihn auszuwählen – rechts im Aufgaben-Panel liegt dann die Schaltfläche **„+ Aufgabe anlegen“** für diesen Tag (ein extra „+ Aufgabe“-Button in jeder Zelle gibt es nicht mehr). Jede Aufgabe zeigt den zugeteilten Namen als **farbigen Chip** – jede Person hat eine feste Farbe, Zuteilungen sind so auf einen Blick erkennbar (mobil und am Desktop). Auf schmalen mobilen Zellen wird im Chip statt des Namens nur das **Akronym (Anfangsbuchstaben)** angezeigt, darunter klein die Uhrzeit – nichts wird mehr mit „…“ abgeschnitten; der volle Name steht im Tooltip bzw. nach dem Antippen des Tags im Aufgaben-Panel. Unbesetzte allgemeine Aufgaben erscheinen rot („Offen") – Rot ist damit immer ein Hinweis auf fehlende Besetzung. **Gruppentermine erscheinen immer blau** – bei mehreren Gruppen **dunkelblau** mit weißer Schrift –, unabhängig davon, ob eine Person eingeteilt ist. Jede Person hat außerdem eine **feste, eindeutige Farbe** (kollisionsfrei, auf allen Geräten identisch). Die Kalenderzellen **wachsen automatisch mit**, wenn an einem Tag mehrere Termine zusammenkommen – in den Zellen muss nicht mehr gescrollt werden. **Importierte Ereignisse** erscheinen zusätzlich als violetter Kurz-Titel in der Zelle (Tooltip mit allen Details), mehrstufig wie Feiertage hervorgehoben.
 
 Im Tab **⚙️ Stammdaten & Export** lässt sich das **Bundesland für die Feiertage** wählen – der Kalender zeigt dann die dortigen gesetzlichen Feiertage (inkl. der länderspezifischen wie Fronleichnam, Allerheiligen, Weltkindertag o. Ä.). Die Einstellung wird pro Gerät gespeichert.
+
+Dort gibt es auch den Bereich **„Ereignisse"**: Über **„📄 Ereignisse importieren (DOCX/TXT)"** lassen sich zusätzliche Termine (z. B. Versammlungsereignisse, Kreiskongresse, Reinigungstage) aus einer Word- oder Textdatei einlesen. Erkannt werden Zeilen mit Kategorie, Titel und Datum (Formate wie „12 Dez 2026", „14 Mrz 2027" oder Zeitspannen wie „09.-14. März, 2027"), optional mit Uhrzeit („18:30-20:30") und Ort. Doppelt importierte Ereignisse werden automatisch erkannt und übersprungen. Ereignisse sind rein informativ – sie blockieren keine Zuteilungen –, erscheinen aber wie Feiertage im Kalender und werden über die Geräte-Synchronisierung verteilt sowie im Backup berücksichtigt.
 
 ## Gruppen
 

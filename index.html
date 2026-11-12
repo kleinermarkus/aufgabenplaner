@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.12';
+    const APP_VERSION = '1.10.13';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -412,6 +412,53 @@
     const isDemoTask = (t) => !!t && t.updatedAt === DEMO_TS && typeof t.id === 'string' && (t.id.indexOf('task-') === 0 || t.id === 'manual-demo-1');
 
     // Entfernt alle Demo-Einträge aus einem Sync-Datenpaket (beim Senden und beim Empfangen)
+    // Ereignisse-Import: erkennt in Textzeilen (DOCX/TXT) Muster wie
+    // "Sonstiges | Instandhaltungstag12 Dez 2026 09:30" oder "Kreisaufseher | Dienstwoche09.-14. März, 2027"
+    const EVENT_MONTHS = { jan: 0, feb: 1, mrz: 2, mär: 2, apr: 3, mai: 4, jun: 5, jul: 6, aug: 7, sep: 8, okt: 9, nov: 10, dez: 11 };
+    const eventDateStr = (d, m, y) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const parseEventsFromText = (raw) => {
+      const out = [];
+      const MONTH_TOKEN = '(Jan|Feb|Mär|Mrz|Apr|Mai|Jun|Jul|Aug|Sep|Okt|Nov|Dez)';
+      const rangeRe = new RegExp('(\\d{1,2})\\.\\s*[-–]\\s*(\\d{1,2})\\.\\s*' + MONTH_TOKEN + '[a-zä]*\\.?,?\\s*(\\d{4})', 'i');
+      const singleRe = new RegExp('(\\d{1,2})\\.?\\s*' + MONTH_TOKEN + '[a-zä]*\\.?,?\\s*(\\d{4})', 'i');
+      const timeRe = /(\d{1,2}:\d{2})(?:\s*[-–]\s*(\d{1,2}:\d{2}))?/;
+      String(raw || '').split(/\r?\n/).forEach(line => {
+        const s = line.trim();
+        if (!s) return;
+        let category = '';
+        let rest = s;
+        const pipe = s.indexOf('|');
+        if (pipe > 0) { category = s.slice(0, pipe).trim(); rest = s.slice(pipe + 1).trim(); }
+        const rm = rest.match(rangeRe);
+        const sm = rest.match(singleRe);
+        const m = rm || sm;
+        if (!m) return;
+        const monthTok = (rm ? m[3] : m[2]).toLowerCase().slice(0, 3);
+        const month = EVENT_MONTHS[monthTok];
+        if (month === undefined) return;
+        const year = parseInt(rm ? m[4] : m[3], 10);
+        const startDay = parseInt(m[1], 10);
+        const dateStr = eventDateStr(startDay, month, year);
+        let endDateStr = null;
+        if (rm) {
+          const endDay = parseInt(m[2], 10);
+          if (endDay > startDay) endDateStr = eventDateStr(endDay, month, year);
+        }
+        const before = rest.slice(0, m.index).trim();
+        const after = rest.slice(m.index + m[0].length).trim();
+        let time = null, timeEnd = null, note = after;
+        const tm = after.match(timeRe);
+        if (tm) {
+          time = tm[1];
+          timeEnd = tm[2] || null;
+          note = (after.slice(0, tm.index) + after.slice(tm.index + tm[0].length)).trim();
+        }
+        const title = before || category || 'Ereignis';
+        out.push({ id: `evt-${Date.now()}-${Math.random()}`, dateStr, endDateStr, title, category, time, timeEnd, note });
+      });
+      return out;
+    };
+
     const stripDemoData = (data) => {
       if (!data || typeof data !== 'object') return { cleaned: data, removed: 0 };
       let removed = 0;
@@ -442,6 +489,7 @@
           });
           return kept;
         })(),
+        events: cut(data.events, () => false),
         tombstones: data.tombstones,
         appVersion: data.appVersion
       };
@@ -504,11 +552,12 @@
       const [bundesland, setBundesland] = useState(() => localStorage.getItem('app_bundesland') || 'SN');
       useEffect(() => localStorage.setItem('app_bundesland', bundesland), [bundesland]);
       const [groups, setGroups] = useState(() => JSON.parse(localStorage.getItem('app_groups')) || INITIAL_GROUPS);
+      const [events, setEvents] = useState(() => JSON.parse(localStorage.getItem('app_events')) || []);
       useEffect(() => localStorage.setItem('app_groups', JSON.stringify(groups)), [groups]);
 
       // Lösch-Markierungen (Tombstones): Gelöschte IDs werden gemerkt und mit synchronisiert,
       // damit Löschungen auf anderen Geräten nicht durch den Union-Merge wiederhergestellt werden.
-      const TOMBSTONE_COLLECTIONS = ['locations', 'timeSlots', 'patterns', 'groups', 'people', 'schedule', 'absences'];
+      const TOMBSTONE_COLLECTIONS = ['locations', 'timeSlots', 'patterns', 'groups', 'people', 'schedule', 'absences', 'events'];
       const normalizeTombstones = (raw) => {
         const base = {};
         TOMBSTONE_COLLECTIONS.forEach(c => { base[c] = {}; });
@@ -542,6 +591,7 @@
       useEffect(() => localStorage.setItem('app_sched', JSON.stringify(schedule)), [schedule]);
       useEffect(() => localStorage.setItem('app_synclog', JSON.stringify(syncLog)), [syncLog]);
       useEffect(() => localStorage.setItem('app_tombstones', JSON.stringify(tombstones)), [tombstones]);
+      useEffect(() => localStorage.setItem('app_events', JSON.stringify(events)), [events]);
 
       // PWA: Service Worker registrieren und periodisch nach einer neuen Server-Version prüfen
       useEffect(() => {
@@ -574,7 +624,7 @@
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
       const SYNC_PREFIX = 'aufgabenplaner-';
 
-      const collectSyncData = () => stripDemoData({ appVersion: APP_VERSION, locations, timeSlots, patterns, groups, people, schedule, tombstones }).cleaned;
+      const collectSyncData = () => stripDemoData({ appVersion: APP_VERSION, locations, timeSlots, patterns, groups, people, schedule, events, tombstones }).cleaned;
 
       const mergeById = (local, incoming) => {
         const map = new Map((local || []).map(item => [item.id, item]));
@@ -611,7 +661,7 @@
         suppressSendRef.current = true;
         const { cleaned: incoming, removed: incomingDemoRemoved } = stripDemoData(data);
         if (incomingDemoRemoved > 0) addSyncLog('info', `🧹 Demo-Daten des anderen Geräts ignoriert (${incomingDemoRemoved})`);
-        const hasRealIncoming = ['locations', 'timeSlots', 'patterns', 'groups', 'schedule', 'people'].some(k => Array.isArray(incoming[k]) && incoming[k].length > 0);
+        const hasRealIncoming = ['locations', 'timeSlots', 'patterns', 'groups', 'schedule', 'people', 'events'].some(k => Array.isArray(incoming[k]) && incoming[k].length > 0);
         const demoWipeIds = {};
         let demoWipeCount = 0;
         let baseLocations = locations;
@@ -670,7 +720,7 @@
         };
         const revive = (collection, id) => { delete mergedTombstones[collection][id]; };
 
-        const added = { locations: 0, timeSlots: 0, patterns: 0, groups: 0, people: 0, schedule: 0, deletions: 0 };
+        const added = { locations: 0, timeSlots: 0, patterns: 0, groups: 0, people: 0, schedule: 0, events: 0, deletions: 0 };
         let changed = false;
 
         if (Array.isArray(incoming.locations)) {
@@ -708,6 +758,15 @@
           added.groups = filtered.filter(i => !baseGroups.some(l => l.id === i.id)).length;
           const next = mergeTasks(keptLocal, filtered);
           if (stableStringify(next) !== stableStringify(baseGroups)) { changed = true; setGroups(next); }
+        }
+        if (Array.isArray(incoming.events)) {
+          const filtered = incoming.events.filter(i => i && i.id && !isDeleted('events', i.id, i.updatedAt));
+          filtered.forEach(i => { if (i.updatedAt) revive('events', i.id); });
+          const keptLocal = (events || []).filter(l => !isDeleted('events', l.id, l.updatedAt));
+          added.deletions += (events || []).length - keptLocal.length;
+          added.events = filtered.filter(i => !(events || []).some(l => l.id === i.id)).length;
+          const next = mergeById(keptLocal, filtered);
+          if (stableStringify(next) !== stableStringify(events)) { changed = true; setEvents(next); }
         }
         if (Array.isArray(incoming.schedule)) {
           const filtered = incoming.schedule.filter(i => i && i.id && !isDeleted('schedule', i.id, i.updatedAt));
@@ -747,7 +806,7 @@
           setTombstones(mergedTombstones);
         }
         if (changed) {
-          const logText = `Übernommen: ${added.locations} Orte, ${added.timeSlots} Zeitslots, ${added.patterns} Muster, ${added.groups} Gruppen, ${added.people} Personen, ${added.schedule} Termine` + (added.deletions > 0 ? `, ${added.deletions} Löschungen` : '');
+          const logText = `Übernommen: ${added.locations} Orte, ${added.timeSlots} Zeitslots, ${added.patterns} Muster, ${added.groups} Gruppen, ${added.people} Personen, ${added.schedule} Termine, ${added.events} Ereignisse` + (added.deletions > 0 ? `, ${added.deletions} Löschungen` : '');
           addSyncLog('empfangen', logText);
         }
         if (demoWipeCount > 0) {
@@ -1033,6 +1092,19 @@
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth();
       const holidays = useMemo(() => getGermanHolidays(year, bundesland), [year, bundesland]);
+      const eventsByDate = useMemo(() => {
+        const map = {};
+        (events || []).forEach(ev => {
+          if (!ev || !ev.dateStr) return;
+          const start = parseLocalDate(ev.dateStr);
+          const end = ev.endDateStr ? parseLocalDate(ev.endDateStr) : start;
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            map[toLocalDateStr(d)] = (map[toLocalDateStr(d)] || []).concat(ev);
+            if (d - start > 31 * 86400000) break;
+          }
+        });
+        return map;
+      }, [events]);
       const personColorMap = useMemo(() => buildPersonColorMap(people), [people]);
       const getPersonColorById = (id) => (id && personColorMap[id]) || getPersonColor(id);
 
@@ -1614,6 +1686,35 @@
         }
       };
 
+      // Ereignisse importieren (DOCX/TXT) – erscheinen wie Feiertage im Kalender
+      const handleEventsImport = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          let raw = '';
+          const fileName = file.name.toLowerCase();
+          if (fileName.endsWith('.docx')) {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+            raw = result.value;
+          } else {
+            raw = await file.text();
+          }
+          const parsed = parseEventsFromText(raw);
+          if (parsed.length === 0) { showToast('Keine Ereignisse in der Datei erkannt.', 'error'); e.target.value = ''; return; }
+          const keyOf = (ev) => `${ev.dateStr}|${ev.endDateStr || ''}|${ev.title}|${ev.time || ''}`;
+          const seen = new Set((events || []).map(keyOf));
+          const fresh = parsed.filter(ev => !seen.has(keyOf(ev)));
+          if (fresh.length === 0) { showToast('Alle Ereignisse sind bereits vorhanden.', 'error'); e.target.value = ''; return; }
+          setEvents([...(events || []), ...fresh]);
+          showToast(`${fresh.length} Ereignisse importiert.`, 'success');
+        } catch (err) {
+          console.error(err);
+          showToast('Fehler beim Lesen der Datei.', 'error');
+        }
+        e.target.value = '';
+      };
+
       const handleBackupImport = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -1627,6 +1728,7 @@
             if (data.groups) setGroups(data.groups);
             if (data.people) setPeople(data.people);
             if (data.schedule) setSchedule(data.schedule);
+            if (data.events) setEvents(data.events);
             showToast('Backup erfolgreich importiert!', 'success');
           } catch (err) {
             console.error(err);
@@ -1659,6 +1761,7 @@
         const isCurrentMonth = currIter.getMonth() === month;
         const isSelected = selectedDateStr === dateStr;
         const holidayName = holidays[dateStr];
+        const dayEvents = eventsByDate[dateStr] || [];
         const dayTasks = schedule.filter(t => t.dateStr === dateStr);
         dayElements.push(
           h('div', {
@@ -1666,11 +1769,15 @@
             onClick: () => setSelectedDateStr(dateStr),
             className: `min-h-[60px] sm:min-h-24 p-1 sm:p-1.5 border rounded-lg cursor-pointer transition-all flex flex-col justify-between min-w-0 print-day-box ${
               isSelected ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-200' : 'border-slate-200 bg-white hover:border-slate-300'
-            } ${!isCurrentMonth ? 'opacity-40 bg-slate-100/50' : ''} ${holidayName ? 'bg-amber-50/40' : ''}`
+            } ${!isCurrentMonth ? 'opacity-40 bg-slate-100/50' : ''} ${holidayName ? 'bg-amber-50/40' : (dayEvents.length > 0 ? 'bg-violet-50/40' : '')}`
           },
             h('div', { className: 'flex justify-between items-start' },
               h('span', { className: `text-xs font-bold px-1.5 py-0.5 rounded ${holidayName ? 'bg-amber-200 text-amber-900' : 'text-slate-700'}` }, dayNum),
-              holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[36px] sm:max-w-[70px]' }, holidayName) : null
+              holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[36px] sm:max-w-[70px]' }, holidayName) : null,
+              dayEvents.length > 0 ? h('span', {
+                className: 'text-[9px] font-semibold text-violet-700 truncate max-w-[36px] sm:max-w-[70px]',
+                title: dayEvents.map(ev => `${ev.title}${ev.time ? ' ' + ev.time : ''}${ev.note ? ' (' + ev.note + ')' : ''}`).join(' · ')
+              }, dayEvents.map(ev => ev.title).join(' · ')) : null
             ),
             h('div', { className: 'hidden sm:block space-y-1 my-1 min-w-0' },
               dayTasks.map(t => {
@@ -2705,6 +2812,25 @@
             ),
 
             h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
+              h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Ereignisse'),
+              h('div', { className: 'flex flex-wrap gap-3 items-center' },
+                h('label', { className: 'cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm' },
+                  '📄 Ereignisse importieren (DOCX/TXT)',
+                  h('input', { type: 'file', accept: '.docx,.txt,text/plain', onChange: handleEventsImport, className: 'hidden' })
+                )
+              ),
+              events.length > 0 ? h('div', { className: 'space-y-1 max-h-64 overflow-auto' },
+                [...events].sort((a, b) => a.dateStr.localeCompare(b.dateStr)).map(ev => h('div', { key: ev.id, className: 'flex items-center justify-between text-xs bg-slate-50 rounded-lg px-3 py-2 gap-2' },
+                  h('div', { className: 'min-w-0' },
+                    h('div', { className: 'font-bold text-slate-800 truncate' }, `${ev.title}${ev.time ? ' · ' + ev.time + (ev.timeEnd ? '-' + ev.timeEnd : '') : ''}`),
+                    h('div', { className: 'text-slate-500 truncate' }, `${ev.dateStr}${ev.endDateStr ? ' – ' + ev.endDateStr : ''}${ev.note ? ' · ' + ev.note : ''}`)
+                  ),
+                  h('button', { onClick: () => { markDeleted('events', ev.id); setEvents(events.filter(x => x.id !== ev.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline shrink-0' }, 'Löschen')
+                ))
+              ) : h('p', { className: 'text-xs text-slate-500' }, 'Noch keine Ereignisse importiert. Importierte Ereignisse erscheinen wie Feiertage im Kalender und werden mitgesynct.')
+            ),
+
+            h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
               h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Datensicherung & App-Export'),
               h('div', { className: 'flex flex-wrap gap-4 items-center' },
                 h('button', {
@@ -2713,7 +2839,7 @@
                 }, '📥 Gesamte App (.html) herunterladen'),
                 h('button', {
                   onClick: () => {
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ locations, timeSlots, patterns, groups, people, schedule }));
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ locations, timeSlots, patterns, groups, people, schedule, events }));
                     const downloadAnchor = document.createElement('a');
                     downloadAnchor.setAttribute("href", dataStr);
                     downloadAnchor.setAttribute("download", "aufgabenplaner_backup.json");
