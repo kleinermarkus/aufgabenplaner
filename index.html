@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.11.5';
+    const APP_VERSION = '1.11.4';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1284,7 +1284,7 @@
 
       const loadAssistantModel = async () => {
         if (!navigator.gpu) { setAiPhase('nogpu'); return; }
-        if (aiEngineRef.current && aiLoadedModelRef.current === aiModelId) { setAiPhase('ready'); return true; }
+        if (aiEngineRef.current && aiLoadedModelRef.current === aiModelId) { setAiPhase('ready'); return; }
         if (aiEngineRef.current) {
           try { aiEngineRef.current.unload(); } catch (err) {}
           aiEngineRef.current = null;
@@ -1304,12 +1304,10 @@
           aiEngineRef.current = engine;
           aiLoadedModelRef.current = aiModelId;
           setAiPhase('ready'); setAiNote('');
-          return true;
         } catch (err) {
           console.error(err);
           setAiPhase('error');
           setAiNote('Laden fehlgeschlagen: ' + String(err?.message || err));
-          return false;
         }
       };
 
@@ -1340,37 +1338,14 @@
               try { aiEngineRef.current.interruptGenerate(); } catch (err) {}
             }
           }, 5000);
-          for (let attempt = 0; attempt < 2; attempt++) {
-            try {
-              reply = '';
-              const chunks = await aiEngineRef.current.chat.completions.create({ messages, stream: true, stream_options: { include_usage: true }, temperature: 0.3, max_tokens: 500 });
-              for await (const chunk of chunks) {
-                const delta = chunk.choices?.[0]?.delta?.content || '';
-                if (delta) {
-                  lastActivity = Date.now();
-                  reply += delta;
-                  setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: reply }; return cp; });
-                  if (aiChatRef.current) aiChatRef.current.scrollTop = aiChatRef.current.scrollHeight;
-                }
-              }
-              break;
-            } catch (genErr) {
-              const gmsg = String(genErr?.message || genErr);
-              if (attempt === 0 && /GPUBuffer|unmapped|WebGPU/i.test(gmsg)) {
-                try { aiEngineRef.current?.unload(); } catch (e) {}
-                aiEngineRef.current = null;
-                aiLoadedModelRef.current = null;
-                setAiPhase('loading');
-                setAiNote('GPU-R\u00fccksetzung \u2013 Modell wird neu geladen\u2026');
-                const ok = await loadAssistantModel();
-                if (!ok) {
-                  setAiPhase('error');
-                  setAiNote('GPU-Fehler des Ger\u00e4ts/Treibers. Bitte sp\u00e4ter erneut versuchen oder ein kleineres Modell w\u00e4hlen. (Details: ' + gmsg + ')');
-                  break;
-                }
-                continue;
-              }
-              throw genErr;
+          const chunks = await aiEngineRef.current.chat.completions.create({ messages, stream: true, stream_options: { include_usage: true }, temperature: 0.3, max_tokens: 500 });
+          for await (const chunk of chunks) {
+            const delta = chunk.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              lastActivity = Date.now();
+              reply += delta;
+              setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: reply }; return cp; });
+              if (aiChatRef.current) aiChatRef.current.scrollTop = aiChatRef.current.scrollHeight;
             }
           }
           if (!reply.trim()) {
@@ -1384,7 +1359,7 @@
             aiEngineRef.current = null;
             aiLoadedModelRef.current = null;
             setAiPhase('error');
-            setAiNote('GPU-Fehler des Ger\u00e4ts/Treibers \u2013 auch nach einem automatischen Neuladen. Bitte sp\u00e4ter erneut versuchen oder ein kleineres Modell w\u00e4hlen. (Details: ' + msg + ')');
+            setAiNote('GPU-Fehler des Ger\u00e4ts/Treibers. Bitte \u201eModell laden\u201c erneut dr\u00fccken \u2013 die Last pro Rechenschritt ist jetzt reduziert; bei weiteren Fehlern \u201eQwen 0,5B \u2013 32-Bit\u201c w\u00e4hlen. (Details: ' + msg + ')');
           } else {
             setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + msg }; return cp; });
           }
