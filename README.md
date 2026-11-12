@@ -8,16 +8,19 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 - **Monatskalender** mit Feiertagen (Bundesland einstellbar), farbigen Namens-Chips (mobil als Akronym) und mitwachsenden Zellen bei mehreren Terminen pro Tag; Gruppentermine zeigen links einen Ein-Buchstaben-Chip je Gruppe (unterscheidendes Wort, z. B. „Gruppe Nord“ → „N“); ohne Zuteilung steht dort der Gruppenname bzw. bei mehreren Gruppen „Gruppen“ (mobil Kürzel); Gruppentermine erscheinen blau – bei mehreren Gruppen dunkelblau; unbesetzte allgemeine Termine rot
 - **Tag antippen** → Aufgaben-Panel rechts: „+ Aufgabe anlegen", Zeitslot/Ort ändern, **Gruppen-Chips direkt am Termin umschalten**, ⭐ **Empfehlung** anklickbar, Verfügbarkeits-Liste mit Klick-Zuteilung und **Grundangaben** bei Sperren (Abwesend, Schicht, Qualifikation, Gruppe)
 - **📅 Datum ändern** – jeden geplanten Termin direkt im Panel verschieben (Datumsfeld am Termin); der Kalender springt zum neuen Tag, Kollisionen zur gleichen Zeit werden abgefangen. Bei Wechsel des Wochentags fragt ein Banner, ob ein vorhandener Zeitslot des neuen Wochentags genutzt (mit Anzahl qualifizierter Personen) oder ein neuer Zeitslot angelegt werden soll – so bleiben die Qualifikationsprüfungen korrekt; ist die aktuell zugeteilte Person für den neuen Zeitslot nicht qualifiziert, gibt es einen Warnhinweis
-- **1. Termine generieren (vollst. KW)** – legt alle wiederkehrenden Termine des Monats an (inkl. Gruppentermine), mit Duplikatschutz auch über Monatswechsel hinweg
-- **2. Personen zuteilen** – faire automatische Verteilung (Gruppentermine ausgenommen)
-- **🧹 Zuteilungen zurücksetzen (Monat)** – alle Zuteilungen des Monats freigeben, dann neu verteilen
-- **🖨️ Monatsplan als PDF drucken** – druckoptimierte Ansicht
-- **Monatstermine löschen** – alle Termine des angezeigten Monats entfernen
+- **1. Abwesenheiten importieren** – Abwesenheiten aus PDF/DOCX einlesen
+- **2. Ereignisse importieren** – zusätzliche Termine (z. B. Versammlungsereignisse) aus DOCX/TXT einlesen
+- **3. Termine generieren** – legt alle wiederkehrenden Termine des Monats an (inkl. Gruppentermine), mit Duplikatschutz auch über Monatswechsel hinweg
+- **4. Personen zuteilen** – faire automatische Verteilung (Gruppentermine ausgenommen)
+- **5. Zuteilungen löschen** – alle Zuteilungen des Monats freigeben, dann neu verteilen
+- **6. Termine löschen** – alle Termine des angezeigten Monats entfernen
+
+Die Schaltflächen über dem Kalender sind in der **empfohlenen monatlichen Reihenfolge** nummeriert: erst Importe, dann Termine generieren, dann Personen zuteilen – mit 5 und 6 lassen sich Zuteilungen bzw. Termine des Monats wieder entfernen.
 
 ### 👥 Personen & Matrix
 - **Personen anlegen/verwalten** (Name; jede erhält automatisch eine **eindeutige Farbe**, keine zwei Personen teilen sich einen Farbton)
 - **Qualifikations-Matrix**: Pro Person × Zeitslot × Ort, wer kann was übernehmen
-- **Abwesenheiten**: Pro Person manuell (Start/Ende, Grund) oder **Import aus PDF/DOCX**
+- **Abwesenheiten**: Pro Person manuell (Start/Ende, Grund) oder per Import (Schaltfläche „1. Abwesenheiten importieren" auf der Kalenderseite)
 - **Externes Schichtsystem (Rotation)**: Startdatum + beliebiger Rhythmus aus Früh/Spät/Nacht/frei (F/S/N/–), Vorschau der nächsten 7 Tage; Schichten blockieren automatisch (Früh 06–14, Spät 14–22, Nacht 22–06 + Folgetag bis 14 Uhr)
 
 ### 🔄 Wiederkehrende Muster
@@ -31,7 +34,7 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 - **Orte** und **Zeitslots** verwalten (Wochentag + Uhrzeit)
 - **Gruppen verwalten**: Anlegen, Mitglieder zuordnen; Löschen entfernt die Gruppe aus allen Terminen/Mustern
 - **Bundesland** für die gesetzlichen Feiertage (16 Länder, Standard Sachsen)
-- **Ereignisse importieren** (DOCX/TXT): Zusätzliche Termine (z. B. Versammlungsereignisse) aus einer Datei einlesen – sie erscheinen wie Feiertage (violett) im Kalender, mit Titel, Uhrzeit und Ort; Zeitspannen (z. B. „09.-14. März") werden auf alle Tage verteilt; Liste mit Löschen-Möglichkeit
+- **Ereignisse verwalten**: importierte Ereignisse mit Titel, Uhrzeit, Zeitraum und Ort einsehen und einzeln löschen – der Import erfolgt über die Schaltfläche „2. Ereignisse importieren" auf der Kalenderseite
 - **Datensicherung**: Backup als JSON exportieren/importieren, **gesamte App als .html herunterladen**
 - **Gefahrenzone**: Alle Anwendungsdaten komplett löschen
 
@@ -67,7 +70,7 @@ Im Monats-Kalender genügt ein **Tipp/Antippen auf den Tag**, um ihn auszuwähle
 
 Im Tab **⚙️ Stammdaten & Export** lässt sich das **Bundesland für die Feiertage** wählen – der Kalender zeigt dann die dortigen gesetzlichen Feiertage (inkl. der länderspezifischen wie Fronleichnam, Allerheiligen, Weltkindertag o. Ä.). Die Einstellung wird pro Gerät gespeichert.
 
-Dort gibt es auch den Bereich **„Ereignisse"**: Über **„📄 Ereignisse importieren (DOCX/TXT)"** lassen sich zusätzliche Termine (z. B. Versammlungsereignisse, Kreiskongresse, Reinigungstage) aus einer Word- oder Textdatei einlesen. Erkannt werden Zeilen mit Kategorie, Titel und Datum (Formate wie „12 Dez 2026", „14 Mrz 2027" oder Zeitspannen wie „09.-14. März, 2027"), optional mit Uhrzeit („18:30-20:30") und Ort. Doppelt importierte Ereignisse werden automatisch erkannt und übersprungen. Ereignisse sind rein informativ – sie blockieren keine Zuteilungen –, erscheinen aber wie Feiertage im Kalender und werden über die Geräte-Synchronisierung verteilt sowie im Backup berücksichtigt.
+Die Schaltflächen **„1. Abwesenheiten importieren"** und **„2. Ereignisse importieren"** liegen in der Aktionsleiste direkt über dem Kalender. Über **„2. Ereignisse importieren"** lassen sich zusätzliche Termine (z. B. Versammlungsereignisse, Kreiskongresse, Reinigungstage) aus einer Word- oder Textdatei einlesen. Erkannt werden Zeilen mit Kategorie, Titel und Datum (Formate wie „12 Dez 2026", „14 Mrz 2027" oder Zeitspannen wie „09.-14. März, 2027"), optional mit Uhrzeit („18:30-20:30") und Ort. Doppelt importierte Ereignisse werden automatisch erkannt und übersprungen. In den Stammdaten bleibt der Bereich **„Ereignisse"** zum Einsehen und Löschen. Ereignisse sind rein informativ – sie blockieren keine Zuteilungen –, erscheinen aber wie Feiertage im Kalender und werden über die Geräte-Synchronisierung verteilt sowie im Backup berücksichtigt.
 
 ## Gruppen
 
@@ -103,7 +106,7 @@ Die automatische Zuteilung („2. Personen zuteilen") und die Empfehlung im Aufg
 3. **Wochentags-Balance** – wer an diesem Wochentag seltener dran war,
 4. alphabetisch (entscheidet nur bei völliger Gleichheit).
 
-Die Bewertung zählt **alle vorhandenen Einteilungen** – Vergangenheit und Zukunft, manuell und automatisch zugeteilt. Einzige Ausnahme: **Gruppentermine laufen außer Konkurrenz** (zählen in keiner Bilanz). Wer an einem Tag einem **Gruppentermin** zugeteilt ist, wird an dem Tag nicht für allgemeine Termine eingeteilt – in der Verfügbarkeits-Liste als „Gruppentermin an diesem Tag“ erkennbar. Die **Pause** ist der Abstand zur **nächsten Einteilung – davor oder danach**: Ein manuell vorgemerkter Termin in der Zukunft (z. B. Sonntagstermin) zählt damit genauso wie ein zurückliegender Einsatz und verhindert, dass dieselbe Person für nahe Termine derselben Woche (z. B. Montag davor) automatisch eingeteilt wird. Damit wird niemand übersprungen, wenn andere verfügbar sind. Bereits zugeteilte Aufgaben bleiben beim erneuten Ausführen unverändert; mit **„🧹 Zuteilungen zurücksetzen (Monat)"** und erneutem „Personen zuteilen" wird ein Monat komplett neu und fair verteilt.
+Die Bewertung zählt **alle vorhandenen Einteilungen** – Vergangenheit und Zukunft, manuell und automatisch zugeteilt. Einzige Ausnahme: **Gruppentermine laufen außer Konkurrenz** (zählen in keiner Bilanz). Wer an einem Tag einem **Gruppentermin** zugeteilt ist, wird an dem Tag nicht für allgemeine Termine eingeteilt – in der Verfügbarkeits-Liste als „Gruppentermin an diesem Tag“ erkennbar. Die **Pause** ist der Abstand zur **nächsten Einteilung – davor oder danach**: Ein manuell vorgemerkter Termin in der Zukunft (z. B. Sonntagstermin) zählt damit genauso wie ein zurückliegender Einsatz und verhindert, dass dieselbe Person für nahe Termine derselben Woche (z. B. Montag davor) automatisch eingeteilt wird. Damit wird niemand übersprungen, wenn andere verfügbar sind. Bereits zugeteilte Aufgaben bleiben beim erneuten Ausführen unverändert; mit **„5. Zuteilungen löschen"** und erneutem „Personen zuteilen" wird ein Monat komplett neu und fair verteilt.
 
 Im Aufgaben-Panel ist die **Verfügbarkeits-Liste direkt bedienbar**: Jeder Name ist ein Button – Klick weist die Person zu (erneuter Klick auf die zugewiesene Person gibt die Zuteilung wieder frei). Die ⭐-Empfehlung ist ebenfalls anklickbar; gesperrte Personen sind ausgegraut und zeigen den **Grund** (z. B. Schicht, Abwesenheit, nicht qualifiziert, Gruppentermin an diesem Tag).
 

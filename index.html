@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.13';
+    const APP_VERSION = '1.10.14';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1456,10 +1456,6 @@
         }
       };
 
-      const handlePrintPdf = () => {
-        window.print();
-      };
-
       // Ort hinzufügen
       const handleAddLocation = (e) => {
         e.preventDefault();
@@ -1932,11 +1928,18 @@
                 h('button', { onClick: () => setCurrentDate(new Date(year, month + 1, 1)), className: 'p-2 border rounded-lg font-bold' }, '›')
               ),
               h('div', { className: 'flex flex-wrap gap-2 items-center' },
-                h('button', { onClick: generateDates, className: 'px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm' }, '1. Termine generieren (vollst. KW)'),
-                h('button', { onClick: assignPeople, className: 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm' }, '2. Personen zuteilen'),
-                h('button', { onClick: handleClearAllAssignments, className: 'px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm' }, '🧹 Zuteilungen zurücksetzen (Monat)'),
-                h('button', { onClick: handleClearAllSchedule, className: 'px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm' }, '🗑️ Monats-Termine löschen'),
-                h('button', { onClick: handlePrintPdf, className: 'px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5' }, '🖨️ Monatsplan als PDF drucken')
+                h('label', { className: 'cursor-pointer px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm' },
+                  '1. Abwesenheiten importieren',
+                  h('input', { type: 'file', accept: '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document', onChange: handlePdfImport, className: 'hidden' })
+                ),
+                h('label', { className: 'cursor-pointer px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm' },
+                  '2. Ereignisse importieren',
+                  h('input', { type: 'file', accept: '.docx,.txt,text/plain', onChange: handleEventsImport, className: 'hidden' })
+                ),
+                h('button', { onClick: generateDates, className: 'px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shadow-sm' }, '3. Termine generieren'),
+                h('button', { onClick: assignPeople, className: 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm' }, '4. Personen zuteilen'),
+                h('button', { onClick: handleClearAllAssignments, className: 'px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg shadow-sm' }, '5. Zuteilungen löschen'),
+                h('button', { onClick: handleClearAllSchedule, className: 'px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm' }, '6. Termine löschen')
               )
             ),
 
@@ -2199,10 +2202,6 @@
                     className: 'text-xs p-2 border rounded-lg bg-white border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500'
                   }),
                   h('button', { type: 'submit', className: 'bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-3 py-2 rounded-lg' }, '+ Person')
-                ),
-                h('label', { className: 'cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm' },
-                  '📄 Abwesenheiten importieren (PDF/DOCX)',
-                  h('input', { type: 'file', accept: '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document', onChange: handlePdfImport, className: 'hidden' })
                 )
               )
             ),
@@ -2813,12 +2812,6 @@
 
             h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
               h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Ereignisse'),
-              h('div', { className: 'flex flex-wrap gap-3 items-center' },
-                h('label', { className: 'cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm' },
-                  '📄 Ereignisse importieren (DOCX/TXT)',
-                  h('input', { type: 'file', accept: '.docx,.txt,text/plain', onChange: handleEventsImport, className: 'hidden' })
-                )
-              ),
               events.length > 0 ? h('div', { className: 'space-y-1 max-h-64 overflow-auto' },
                 [...events].sort((a, b) => a.dateStr.localeCompare(b.dateStr)).map(ev => h('div', { key: ev.id, className: 'flex items-center justify-between text-xs bg-slate-50 rounded-lg px-3 py-2 gap-2' },
                   h('div', { className: 'min-w-0' },
