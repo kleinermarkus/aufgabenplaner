@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.11.2';
+    const APP_VERSION = '1.11.1';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -131,11 +131,8 @@
     const AI_MODELS = [
       { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen 0,5B \u2013 klein (~0,9 GB)' },
       { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen 1,5B \u2013 empfohlen (~1,6 GB)' },
-      { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B \u2013 gr\u00f6\u00dfter (~2,2 GB)' },
-      { id: 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC', label: 'Qwen 0,5B \u2013 32-Bit, sehr kompatibel (~1,0 GB)' },
-      { id: 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC', label: 'Qwen 1,5B \u2013 32-Bit, f\u00fcr Android (~1,9 GB)' }
+      { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B \u2013 gr\u00f6\u00dfter (~2,2 GB)' }
     ];
-    const AI_DEFAULT_MODEL = /Android/i.test(navigator.userAgent) ? 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC' : AI_MODELS[1].id;
     const getInitials = (name) => {
       if (!name) return '?';
       const parts = name.trim().split(/\s+/);
@@ -657,7 +654,7 @@
       const [aiPhase, setAiPhase] = useState('idle');
       const [aiProgress, setAiProgress] = useState(0);
       const [aiNote, setAiNote] = useState('');
-      const [aiModelId, setAiModelId] = useState(AI_DEFAULT_MODEL);
+      const [aiModelId, setAiModelId] = useState(AI_MODELS[1].id);
       const [aiMessages, setAiMessages] = useState([]);
       const [aiInput, setAiInput] = useState('');
       const [aiBusy, setAiBusy] = useState(false);
@@ -1301,7 +1298,7 @@
         } catch (err) {
           console.error(err);
           setAiPhase('error');
-          setAiNote('Laden fehlgeschlagen: ' + String(err?.message || err));
+          setAiNote(String(err?.message || err));
         }
       };
 
@@ -1347,16 +1344,7 @@
           }
         } catch (err) {
           console.error(err);
-          const msg = String(err?.message || err);
-          if (/GPUBuffer|unmapped|WebGPU/i.test(msg)) {
-            try { aiEngineRef.current?.unload(); } catch (e) {}
-            aiEngineRef.current = null;
-            aiLoadedModelRef.current = null;
-            setAiPhase('error');
-            setAiNote('GPU-Fehler des Ger\u00e4ts/Treibers. Bitte ein anderes Modell w\u00e4hlen \u2013 auf Android am besten eine 32-Bit-Variante \u2013 und erneut laden.');
-          } else {
-            setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + msg }; return cp; });
-          }
+          setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + (err?.message || err) }; return cp; });
         } finally {
           if (watchdog) clearInterval(watchdog);
           aiBusyRef.current = false;
@@ -2146,7 +2134,7 @@
                 ),
                 h('p', { className: 'text-[10px] text-slate-500 break-words' }, aiNote)
               ) : null,
-              aiPhase === 'error' ? h('div', { className: 'p-3 rounded-lg bg-rose-50 border border-rose-300 text-xs text-rose-700 break-words' }, aiNote) : null
+              aiPhase === 'error' ? h('div', { className: 'p-3 rounded-lg bg-rose-50 border border-rose-300 text-xs text-rose-700 break-words' }, 'Fehler beim Laden: ' + aiNote) : null
             ) :
             h('div', { className: 'space-y-3' },
               h('div', { ref: aiChatRef, className: 'h-72 overflow-y-auto space-y-2 p-2 bg-slate-50 rounded-lg' },
