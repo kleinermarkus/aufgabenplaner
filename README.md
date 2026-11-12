@@ -48,6 +48,14 @@ Nach einem Import erscheint über dem Kalender kurz ein **grünes Banner**, das 
 ### 📱 PWA
 - **Installierbar** als App; **Update-Banner** bei neuer Server-Version; **Versionsnummer** im Kopf
 - **Offline-fähig:** Alle Bibliotheken werden lokal mitgeliefert und vom Service Worker vorgehalten – die App startet und arbeitet auch ohne Internetverbindung (nur die Geräte-Synchronisierung braucht dann Internet)
+- Die WebLLM-Bibliothek des Erklär-Assistenten wird ebenfalls vom Service Worker vorgehalten und ist damit offline verfügbar (nur die Modell-Gewichte brauchen beim ersten Laden Internet)
+
+### 🤖 Erklär-Assistent (KI, lokal)
+- **„🤖 Assistent“-Button** im Aufgaben-Panel öffnet einen Chat, der den aktuellen Planungsstand erklärt: Termine des Tages (mit manuell/automatisch-Kennzeichnung), Verfügbarkeiten **mit Gründen**, Einsatz-Bilanz, Pause, Abwesenheiten und Schichtrhythmus je Person
+- **Läuft vollständig lokal** im Browser (WebLLM über WebGPU) – es verlassen keinerlei Planungsdaten das Gerät; Antworten erscheinen als Textstrom (Streaming) und lassen sich jederzeit per Stopp-Schaltfläche abbrechen
+- **Drei wählbare Modelle:** Qwen 0,5B (~0,9 GB), Qwen 1,5B (~1,6 GB, empfohlen) und Llama 3.2 3B (~2,2 GB) – die Modell-Gewichte werden beim ersten Laden **einmalig** von HuggingFace-Servern geladen und danach im Browser-Cache vorgehalten (danach auch offline nutzbar); ein Modellwechsel im Dialog entlädt die vorherige Engine automatisch
+- **Voraussetzung WebGPU** (Chrome/Edge ab Version 113, aktuelle Firefox-/Safari-Versionen); ohne WebGPU zeigt die App einen entsprechenden Hinweis an
+- **Rein erklärend:** Der Assistent ändert nichts – er beschreibt die deterministische Verteilung (Regel-Reihenfolge: längste Pause → niedrigste Bilanz → Wochentags-Ausgleich → alphabetisch) und beantwortet Fragen wie „Warum ist für … niemand eingeteilt?“ per Klick auf Vorschlagsfragen oder per freier Eingabe
 
 ### 🛠️ Zentrale Programm-Funktionen (Code-Referenz)
 | Funktion | Aufgabe |
@@ -63,6 +71,7 @@ Nach einem Import erscheint über dem Kalender kurz ein **grünes Banner**, das 
 | `collectSyncData` / `applySyncData` | Sync-Payload bauen / empfangen (idempotent, Tombstones, LWW via `mergeTasks`) |
 | `isHelloValid` / `isSyncEnvelope` / `generateSyncToken` | Sync-Handshake: Authentifizierung und Nachrichten-Umschläge |
 | `getPairing` / `establishSync` / `scheduleReconnect` | Dauerhafte Kopplung, Verbindungsaufbau, Auto-Reconnect |
+| `buildAssistantContext` / `loadAssistantModel` / `askAssistant` | Kontext für den lokalen KI-Erklär-Assistenten, Laden des WebLLM-Modells und Streaming-Chat |
 
 **Erstinstallation:** Beim allerersten Start (leerer Browser-Speicher) legt die App automatisch **anonyme Demo-Daten** an – 6 Beispielpersonen mit Qualifikations-Matrix, 2 Gruppen, Beispielmuster aller Art (wöchentlich, 2-wöchentlich, monatlich, 1. Wochentag im Monat, Gruppen-Muster), eine Beispiel-Abwesenheit, ein 3-Schicht-Beispiel und einige Termine im aktuellen Monat. Bereits genutzte Apps werden **nie überschrieben** – sobald eigene Daten vorhanden sind, greift keine Demo mehr. Wer eine Demo-App mit einer bereits genutzten App **koppelt**, entfernt die Demo-Daten beim ersten Datenabgleich **automatisch** (mit Protokoll-Eintrag „🧹 Demo-Daten automatisch entfernt“); Demo-Daten werden auch nie auf das andere Gerät übertragen. Zum Entfernen einfach die Demo-Einträge löschen (oder in der Gefahrenzone alle Daten zurücksetzen).
 
@@ -190,6 +199,7 @@ Die App selbst ist eigenständiger Code. Eingebundene Fremdbibliotheken stehen u
 | PDF.js | 2.16.105 | Apache-2.0 | lokal (`pdf-2.16.105.min.js` + `pdf.worker-2.16.105.min.js`) |
 | PeerJS | 1.5.4 | MIT | lokal (`peerjs-1.5.4.min.js`) |
 | qrcodejs | 1.0.0 | MIT | lokal (`qrcode-1.0.0.min.js`) |
+| WebLLM (@mlc-ai/web-llm) | 0.2.88 | Apache-2.0 | lokal (`webllm-0.2.88.min.js`) |
 
 Alle Bibliotheksdateien liegen versioniert im Repository und werden per SRI-Integritäts-Hash abgesichert (siehe Abschnitt Sicherheit) – dadurch funktioniert die App auch ohne Internetverbindung und ohne Abhängigkeit von CDN-Anbietern.
 
@@ -198,4 +208,5 @@ Alle Bibliotheksdateien liegen versioniert im Repository und werden per SRI-Inte
 - **Keine zentrale Datenspeicherung:** Personen, Termine, Abwesenheiten und Einstellungen bleiben ausschließlich im lokalen Browser-Speicher (localStorage) des jeweiligen Geräts. Der Webserver (z. B. GitHub Pages) liefert nur statische Dateien aus – es gibt kein Backend, keine Datenbank und keine Konten.
 - **Keine Analyse oder Weitergabe:** Es gibt kein Tracking, keine Analytics, keine Cookies und keine Telemetrie. Der einzige Abruf von Server-Daten ist die Versionsprüfung (`version.json`).
 - **Geräte-Sync Ende-zu-Ende:** Die Synchronisierung läuft direkt zwischen den gekoppelten Geräten (WebRTC Data Channels, DTLS-verschlüsselt). Es fließen dabei nur verschlüsselte Datenströme – Inhalte sind für die Vermittlungsdienste (PeerJS-Signalisierung, STUN/TURN-Relays) nicht lesbar; übertragen wird die App-Datenbank, keine weiteren personenbezogenen Daten.
+- **Erklär-Assistent (KI) komplett lokal:** Der KI-Assistent läuft über WebLLM direkt im Browser – Planungsdaten gehen nicht an einen Dienst, sondern bleiben auf dem Gerät. Einzige externe Übertragung ist der **einmalige Download der Modell-Gewichte** von HuggingFace-Servern beim ersten Laden (danach im Browser-Cache, offline nutzbar); die Bibliothek selbst wird lokal mitgeliefert.
 - **Hinweis für Teams:** Wer die App für eine Gruppe betreibt, sollte die Beteiligten informieren, dass die Einsatzdaten (Namen, Abwesenheiten) auf den beteiligten Geräten gespeichert und über die Geräte-Kopplung ausgetauscht werden.

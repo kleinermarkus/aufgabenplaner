@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.22';
+    const APP_VERSION = '1.11.0';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -116,6 +116,22 @@
       if (groupCount === 1) return 'bg-blue-100 text-blue-900 border-blue-300';
       return personColor || 'bg-red-50 border-red-300 text-red-700';
     };
+
+    // ---------- Lokaler KI-Erklär-Assistent (WebLLM, WebGPU) ----------
+    const ASSISTANT_SYSTEM_PROMPT = [
+      'Du bist der Erkl\u00e4r-Assistent eines Monatsplaners f\u00fcr Aufgaben.',
+      'Antworte immer kurz, klar und auf Deutsch.',
+      'Antworte ausschlie\u00dflich auf Basis der dir gegebenen Daten \u2013 erfinde nichts.',
+      'Die automatische Verteilung folgt festen Regeln (in dieser Reihenfolge): 1. L\u00e4ngste Pause (Abstand zur n\u00e4chsten Einteilung davor oder danach), 2. Niedrigste Bilanz (wenigste Einteilungen), 3. Wochentags-Ausgleich, 4. Alphabetisch.',
+      'Nur qualifizierte und verf\u00fcgbare Personen k\u00f6nnen eingeteilt werden. Nicht verf\u00fcgbar sind: Abwesende, Personen in Fr\u00fchschicht (06-14 Uhr), Sp\u00e4tschicht (14-22 Uhr), Nachtschicht (22-06 Uhr plus Folgetag bis 14 Uhr) oder mit Gruppentermin am selben Tag.',
+      'Gruppentermine laufen au\u00dfer Konkurrenz: sie z\u00e4hlen nicht in die Bilanz und blockieren den Tag f\u00fcr allgemeine Termine.',
+      'Die Verteilung wurde deterministisch berechnet \u2013 erkl\u00e4re sie, schlage keine \u00c4nderungen am Verfahren vor.'
+    ].join(' ');
+    const AI_MODELS = [
+      { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen 0,5B \u2013 klein (~0,9 GB)' },
+      { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen 1,5B \u2013 empfohlen (~1,6 GB)' },
+      { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B \u2013 gr\u00f6\u00dfter (~2,2 GB)' }
+    ];
     const getInitials = (name) => {
       if (!name) return '?';
       const parts = name.trim().split(/\s+/);
@@ -631,6 +647,19 @@
         const t = setTimeout(() => setImportBanner(null), 12000);
         return () => clearTimeout(t);
       }, [importBanner]);
+
+      // ---------- Lokaler KI-Erklär-Assistent: Zustand ----------
+      const [assistantOpen, setAssistantOpen] = useState(false);
+      const [aiPhase, setAiPhase] = useState('idle');
+      const [aiProgress, setAiProgress] = useState(0);
+      const [aiNote, setAiNote] = useState('');
+      const [aiModelId, setAiModelId] = useState(AI_MODELS[1].id);
+      const [aiMessages, setAiMessages] = useState([]);
+      const [aiInput, setAiInput] = useState('');
+      const [aiBusy, setAiBusy] = useState(false);
+      const aiEngineRef = useRef(null);
+      const aiLoadedModelRef = useRef(null);
+      const aiChatRef = useRef(null);
 
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
       const SYNC_PREFIX = 'aufgabenplaner-';
@@ -1204,6 +1233,119 @@
           return a.name.localeCompare(b.name, 'de');
         });
       };
+
+      // Kontext für den Assistenten: kompakte deutsche Zusammenfassung des Planungsstands zum gewählten Tag
+      const buildAssistantContext = (dateStr) => {
+        const d = parseLocalDate(dateStr);
+        const stats = buildAssignmentStats(schedule, people, null);
+        const dayTasks = schedule.filter(t => t.dateStr === dateStr);
+        const lines = [];
+        lines.push(`Datum: ${DAY_NAMES[d.getDay()]}, ${d.toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' })} (${dateStr})`);
+        if (holidays[dateStr]) lines.push(`Feiertag: ${holidays[dateStr]}`);
+        (eventsByDate[dateStr] || []).forEach(ev => lines.push(`Ereignis: ${ev.title}${ev.time ? ' ' + ev.time : ''}${ev.note ? ' (' + ev.note + ')' : ''}`));
+        lines.push('');
+        lines.push(`Termine des Tages (${dayTasks.length}):`);
+        dayTasks.forEach(t => {
+          const loc = locations.find(l => l.id === t.locationId);
+          const slot = timeSlots.find(s => s.id === t.slotId);
+          const person = people.find(p => p.id === t.assignedPersonId);
+          const gNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
+          lines.push(`- ${slot?.time || '?'} Uhr @ ${loc?.name || 'Ort'}${gNames.length ? ' [Gruppentermin: ' + gNames.join(', ') + ']' : ''}: ${person ? person.name + ' eingeteilt (' + (t.assignedBy === 'manual' ? 'manuell' : 'automatisch') + ')' : 'OFFEN - niemand eingeteilt'}`);
+        });
+        lines.push('');
+        lines.push('Personen (Bilanz = Einteilungen gesamt ohne Gruppentermine, Pause = Abstand in Tagen zur nächsten Einteilung davor oder danach):');
+        const daysBetween = (a, b) => Math.round(Math.abs((parseLocalDate(b) - parseLocalDate(a)) / 86400000));
+        people.forEach(p => {
+          const cnt = stats.counts[p.id] || 0;
+          const ds = stats.dates[p.id] || [];
+          const prev = ds.filter(x => x <= dateStr).pop();
+          const next = ds.find(x => x > dateStr);
+          const pauses = [];
+          if (prev !== undefined) pauses.push(daysBetween(prev, dateStr));
+          if (next !== undefined) pauses.push(daysBetween(dateStr, next));
+          const pause = pauses.length === 0 ? null : Math.min(...pauses);
+          const abs = (p.absences || []).filter(a => a.end >= dateStr).slice(0, 3).map(a => a.start === a.end ? a.start : `${a.start} bis ${a.end}`).join(', ');
+          const shift = p.shiftRotation?.startDate ? `Schichtrhythmus ab ${p.shiftRotation.startDate}` : '';
+          lines.push(`- ${p.name}: Bilanz ${cnt}, Pause ${pause === null ? 'keine Einteilung' : pause + ' Tage'}${prev ? `, letzte Einteilung ${prev}` : ''}${next ? `, nächste Einteilung ${next}` : ''}${abs ? `, Abwesenheiten: ${abs}` : ''}${shift ? `, ${shift}` : ''}`);
+          dayTasks.forEach(t => {
+            const det = getPersonAvailabilityDetails(p, t.slotId, t.locationId, dateStr, t.groupIds);
+            const slot = timeSlots.find(s => s.id === t.slotId);
+            const loc = locations.find(l => l.id === t.locationId);
+            lines.push(`  · ${slot?.time || '?'} Uhr @ ${loc?.name || 'Ort'}: ${det.isAvailable ? 'verfügbar' : 'nicht verfügbar (' + det.reason + ')'}`);
+          });
+        });
+        return lines.join('\n');
+      };
+
+      const loadAssistantModel = async () => {
+        if (!navigator.gpu) { setAiPhase('nogpu'); return; }
+        if (aiEngineRef.current && aiLoadedModelRef.current === aiModelId) { setAiPhase('ready'); return; }
+        if (aiEngineRef.current) {
+          try { aiEngineRef.current.unload(); } catch (err) {}
+          aiEngineRef.current = null;
+        }
+        setAiPhase('loading'); setAiProgress(0); setAiNote('Bibliothek wird geladen…');
+        try {
+          const webllm = await import('./webllm-0.2.88.min.js');
+          const engine = await webllm.CreateMLCEngine(aiModelId, {
+            initProgressCallback: (r) => { setAiProgress(r.progress || 0); setAiNote(r.text || ''); }
+          });
+          aiEngineRef.current = engine;
+          aiLoadedModelRef.current = aiModelId;
+          setAiPhase('ready'); setAiNote('');
+        } catch (err) {
+          console.error(err);
+          setAiPhase('error');
+          setAiNote(String(err?.message || err));
+        }
+      };
+
+      const askAssistant = async (question) => {
+        const q = (question || aiInput).trim();
+        if (!q || aiBusy || aiPhase !== 'ready') return;
+        setAiInput('');
+        setAiBusy(true);
+        const history = [...aiMessages, { role: 'user', content: q }];
+        setAiMessages([...history, { role: 'assistant', content: '' }]);
+        try {
+          const prior = aiMessages.slice(-6).map(m => ({ role: m.role, content: m.content }));
+          const messages = [
+            { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
+            ...prior,
+            { role: 'user', content: q + '\n\n[Aktueller Datenstand]\n' + buildAssistantContext(selectedDateStr) }
+          ];
+          const chunks = await aiEngineRef.current.chat.completions.create({ messages, stream: true, stream_options: { include_usage: true }, temperature: 0.3 });
+          let reply = '';
+          for await (const chunk of chunks) {
+            const delta = chunk.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              reply += delta;
+              setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: reply }; return cp; });
+              if (aiChatRef.current) aiChatRef.current.scrollTop = aiChatRef.current.scrollHeight;
+            }
+          }
+        } catch (err) {
+          console.error(err);
+          setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + (err?.message || err) }; return cp; });
+        }
+        setAiBusy(false);
+      };
+
+      const assistantSuggestions = useMemo(() => {
+        const stats = buildAssignmentStats(schedule, people, null);
+        const dayTasks = schedule.filter(t => t.dateStr === selectedDateStr);
+        const out = [];
+        const openTask = dayTasks.find(t => !t.assignedPersonId);
+        if (openTask) {
+          const loc = locations.find(l => l.id === openTask.locationId);
+          const slot = timeSlots.find(s => s.id === openTask.slotId);
+          out.push(`Warum ist für "${loc?.name || 'Ort'}" um ${slot?.time || '?'} Uhr niemand eingeteilt?`);
+        }
+        const never = people.find(p => !stats.counts[p.id]);
+        if (never) out.push(`Warum wurde ${never.name} bisher nicht eingeteilt?`);
+        out.push(`Wer ist am ${parseLocalDate(selectedDateStr).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' })} verfügbar und warum?`);
+        return out;
+      }, [schedule, people, locations, timeSlots, selectedDateStr]);
 
       const getRecommendedPersonIdForTask = (task) => {
         const candidates = people.filter(p => {
@@ -1945,6 +2087,54 @@
           )
         ) : null,
 
+        assistantOpen ? h('div', { className: 'fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4 no-print', onClick: () => setAssistantOpen(false) },
+          h('div', { className: 'bg-white rounded-xl shadow-xl max-w-lg w-full p-4 sm:p-6 space-y-3', onClick: (e) => e.stopPropagation() },
+            h('div', { className: 'flex justify-between items-center' },
+              h('h2', { className: 'text-lg font-bold text-slate-900' }, '🤖 Erklär-Assistent'),
+              h('div', { className: 'flex items-center gap-2' },
+                aiPhase === 'ready' && aiMessages.length > 0 ? h('button', { onClick: () => setAiMessages([]), className: 'text-xs text-slate-500 hover:text-slate-700 font-semibold' }, 'Neu') : null,
+                h('button', { onClick: () => setAssistantOpen(false), className: 'text-slate-400 hover:text-slate-600 text-lg font-bold' }, '✕')
+              )
+            ),
+            aiPhase === 'nogpu' ? h('div', { className: 'p-3 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900' },
+              'Dieser Browser unterstützt kein WebGPU. Der Assistent benötigt Chrome oder Edge (ab Version 113) bzw. aktuelle Firefox- und Safari-Versionen mit WebGPU-Unterstützung.'
+            ) :
+            aiPhase !== 'ready' ? h('div', { className: 'space-y-3' },
+              h('p', { className: 'text-xs text-slate-500' }, 'Der Assistent läuft vollständig lokal im Browser (WebGPU) und erklärt die Verteilung. Das Modell wird einmalig geladen und im Browser-Cache gespeichert – danach funktioniert es auch offline. Es verlassen keine Daten das Gerät.'),
+              h('div', { className: 'flex gap-2 items-center' },
+                h('select', { value: aiModelId, onChange: (e) => setAiModelId(e.target.value), disabled: aiPhase === 'loading', className: 'flex-1 text-xs p-2 border rounded-lg bg-white border-slate-300' },
+                  AI_MODELS.map(m => h('option', { key: m.id, value: m.id }, m.label))
+                ),
+                h('button', { onClick: loadAssistantModel, disabled: aiPhase === 'loading', className: 'px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50' }, aiPhase === 'loading' ? 'Lädt…' : 'Modell laden')
+              ),
+              aiPhase === 'loading' ? h('div', { className: 'space-y-1' },
+                h('div', { className: 'h-2 bg-slate-100 rounded-full overflow-hidden' },
+                  h('div', { className: 'h-full bg-indigo-600 transition-all', style: { width: Math.round(aiProgress * 100) + '%' } })
+                ),
+                h('p', { className: 'text-[10px] text-slate-500 break-words' }, aiNote)
+              ) : null,
+              aiPhase === 'error' ? h('div', { className: 'p-3 rounded-lg bg-rose-50 border border-rose-300 text-xs text-rose-700 break-words' }, 'Fehler beim Laden: ' + aiNote) : null
+            ) :
+            h('div', { className: 'space-y-3' },
+              h('div', { ref: aiChatRef, className: 'h-72 overflow-y-auto space-y-2 p-2 bg-slate-50 rounded-lg' },
+                aiMessages.length === 0 ? h('p', { className: 'text-xs text-slate-400 italic text-center pt-20' }, 'Frage den Assistenten z. B., warum jemand (nicht) eingeteilt wurde – er antwortet auf Basis der aktuellen Plandaten.') :
+                aiMessages.map((m, i) => h('div', { key: i, className: m.role === 'user' ? 'flex justify-end' : 'flex justify-start' },
+                  h('div', { className: `max-w-[85%] px-3 py-2 rounded-lg text-xs whitespace-pre-wrap ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white border border-slate-200 text-slate-800'}` }, m.content || '…')
+                ))
+              ),
+              h('div', { className: 'flex flex-wrap gap-1.5' },
+                assistantSuggestions.map(s => h('button', { key: s, onClick: () => askAssistant(s), disabled: aiBusy, className: 'px-2 py-1 text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full hover:bg-indigo-100 disabled:opacity-50 text-left' }, s))
+              ),
+              h('form', { onSubmit: (e) => { e.preventDefault(); askAssistant(); }, className: 'flex gap-2' },
+                h('input', { value: aiInput, onChange: (e) => setAiInput(e.target.value), placeholder: 'Frage stellen…', className: 'flex-1 text-xs p-2 border rounded-lg bg-white border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500' }),
+                aiBusy
+                  ? h('button', { type: 'button', onClick: () => { try { aiEngineRef.current.interruptGenerate(); } catch (err) {} }, className: 'px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg' }, 'Stopp')
+                  : h('button', { type: 'submit', disabled: !aiInput.trim(), className: 'px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg disabled:opacity-50' }, 'Senden')
+              )
+            )
+          )
+        ) : null,
+
         toast ? h('div', { className: `fixed bottom-4 right-4 z-50 px-4 py-2.5 rounded-lg shadow-lg text-white font-medium text-sm ${toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}` }, toast.msg) : null,
 
         h('main', { className: 'max-w-[1800px] mx-auto px-3 sm:px-6 mt-3 sm:mt-4 print-container' },
@@ -1995,9 +2185,12 @@
               ),
 
               h('div', { className: 'bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-3 no-print' },
-                h('div', null,
-                  h('h3', { className: 'text-xs font-bold text-slate-400 uppercase tracking-wider' }, 'Ausgewählter Tag'),
-                  h('p', { className: 'text-sm font-bold text-slate-800' }, parseLocalDate(selectedDateStr).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }))
+                h('div', { className: 'flex justify-between items-center gap-2' },
+                  h('div', null,
+                    h('h3', { className: 'text-xs font-bold text-slate-400 uppercase tracking-wider' }, 'Ausgewählter Tag'),
+                    h('p', { className: 'text-sm font-bold text-slate-800' }, parseLocalDate(selectedDateStr).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }))
+                  ),
+                  h('button', { onClick: () => setAssistantOpen(true), className: 'px-2 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg shrink-0', title: 'Lokalen KI-Erklär-Assistent öffnen' }, '🤖 Assistent')
                 ),
 
                 h('div', { className: 'space-y-3' },
