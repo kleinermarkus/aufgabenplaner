@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.11.3';
+    const APP_VERSION = '1.11.2';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -135,7 +135,7 @@
       { id: 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC', label: 'Qwen 0,5B \u2013 32-Bit, sehr kompatibel (~1,0 GB)' },
       { id: 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC', label: 'Qwen 1,5B \u2013 32-Bit, f\u00fcr Android (~1,9 GB)' }
     ];
-    const AI_DEFAULT_MODEL = /Android/i.test(navigator.userAgent) ? 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC' : AI_MODELS[1].id;
+    const AI_DEFAULT_MODEL = /Android/i.test(navigator.userAgent) ? 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC' : AI_MODELS[1].id;
     const getInitials = (name) => {
       if (!name) return '?';
       const parts = name.trim().split(/\s+/);
@@ -1323,7 +1323,7 @@
           const messages = [
             { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
             ...prior,
-            { role: 'user', content: q + '\n\n[Aktueller Datenstand]\n' + (() => { const ctx = buildAssistantContext(selectedDateStr); return ctx.length > 6000 ? ctx.slice(0, 6000) + '\n[Kontext gek\u00fcrzt]' : ctx; })() }
+            { role: 'user', content: q + '\n\n[Aktueller Datenstand]\n' + buildAssistantContext(selectedDateStr) }
           ];
           let reply = '';
           let lastActivity = Date.now();
@@ -1353,7 +1353,7 @@
             aiEngineRef.current = null;
             aiLoadedModelRef.current = null;
             setAiPhase('error');
-            setAiNote('GPU-Fehler des Ger\u00e4ts/Treibers. Bitte \u201eQwen 0,5B \u2013 32-Bit\u201c w\u00e4hlen und erneut laden; schl\u00e4gt das fehl, unterst\u00fctzt dieses Ger\u00e4t WebGPU leider nicht stabil. (Details: ' + msg + ')');
+            setAiNote('GPU-Fehler des Ger\u00e4ts/Treibers. Bitte ein anderes Modell w\u00e4hlen \u2013 auf Android am besten eine 32-Bit-Variante \u2013 und erneut laden.');
           } else {
             setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + msg }; return cp; });
           }
