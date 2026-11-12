@@ -37,7 +37,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.14';
+    const APP_VERSION = '1.10.15';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -620,6 +620,14 @@
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3500);
       };
+
+      // Banner nach Import: listet die Änderungen kurz auf und verschwindet automatisch
+      const [importBanner, setImportBanner] = useState(null);
+      useEffect(() => {
+        if (!importBanner) return;
+        const t = setTimeout(() => setImportBanner(null), 12000);
+        return () => clearTimeout(t);
+      }, [importBanner]);
 
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
       const SYNC_PREFIX = 'aufgabenplaner-';
@@ -1617,6 +1625,7 @@
 
           let currentPeople = JSON.parse(JSON.stringify(people));
           let addedCount = 0;
+          let addedByPerson = {};
           let currentPersonName = null;
 
           textLines.forEach(line => {
@@ -1665,6 +1674,8 @@
                 if (!exists) {
                   person.absences.push({ id: `abs-${Date.now()}-${Math.random()}`, start, end, label: 'DOCX/PDF Import' });
                   addedCount++;
+                  if (!addedByPerson[person.name]) addedByPerson[person.name] = [];
+                  addedByPerson[person.name].push(start === end ? start : `${start} – ${end}`);
                 }
               }
             }
@@ -1672,7 +1683,10 @@
 
           setPeople(currentPeople);
           if (addedCount > 0) {
-            showToast(`${addedCount} Abwesenheiten erfolgreich importiert!`, 'success');
+            setImportBanner({
+              title: `✅ ${addedCount} neue Abwesenheiten importiert`,
+              lines: Object.keys(addedByPerson).map(name => `${name}: ${addedByPerson[name].join(', ')}`)
+            });
           } else {
             showToast('Keine neuen Abwesenheiten erkannt.', 'error');
           }
@@ -1703,7 +1717,10 @@
           const fresh = parsed.filter(ev => !seen.has(keyOf(ev)));
           if (fresh.length === 0) { showToast('Alle Ereignisse sind bereits vorhanden.', 'error'); e.target.value = ''; return; }
           setEvents([...(events || []), ...fresh]);
-          showToast(`${fresh.length} Ereignisse importiert.`, 'success');
+          setImportBanner({
+            title: `✅ ${fresh.length} neue Ereignisse importiert`,
+            lines: fresh.map(ev => `${ev.title} – ${ev.dateStr}${ev.endDateStr ? ' – ' + ev.endDateStr : ''}${ev.time ? ', ' + ev.time : ''}${ev.note ? ' (' + ev.note + ')' : ''}`)
+          });
         } catch (err) {
           console.error(err);
           showToast('Fehler beim Lesen der Datei.', 'error');
@@ -1921,11 +1938,20 @@
 
         h('main', { className: 'max-w-7xl mx-auto px-3 sm:px-6 mt-4 sm:mt-6 print-container' },
           activeTab === 'calendar' ? h('div', { className: 'space-y-6' },
+            importBanner ? h('div', { className: 'bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl px-4 py-3 shadow-sm no-print flex items-start justify-between gap-3' },
+              h('div', { className: 'min-w-0 flex-1' },
+                h('div', { className: 'text-sm font-bold' }, importBanner.title),
+                h('ul', { className: 'mt-1 space-y-0.5 text-xs max-h-40 overflow-auto' },
+                  importBanner.lines.map((line, i) => h('li', { key: i }, line))
+                )
+              ),
+              h('button', { onClick: () => setImportBanner(null), className: 'text-emerald-700 hover:text-emerald-900 font-bold text-sm shrink-0', title: 'Banner schließen' }, '✕')
+            ) : null,
             h('div', { className: 'bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-4 no-print' },
               h('div', { className: 'flex items-center gap-3' },
-                h('button', { onClick: () => setCurrentDate(new Date(year, month - 1, 1)), className: 'p-2 border rounded-lg font-bold' }, '‹'),
+                h('button', { onClick: () => setCurrentDate(new Date(year, month - 1, 1)), className: 'w-10 h-10 border rounded-lg font-bold flex items-center justify-center text-lg hover:bg-slate-100' }, '‹'),
                 h('h2', { className: 'text-lg font-bold text-slate-800 w-36 sm:w-44 text-center' }, currentDate.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })),
-                h('button', { onClick: () => setCurrentDate(new Date(year, month + 1, 1)), className: 'p-2 border rounded-lg font-bold' }, '›')
+                h('button', { onClick: () => setCurrentDate(new Date(year, month + 1, 1)), className: 'w-10 h-10 border rounded-lg font-bold flex items-center justify-center text-lg hover:bg-slate-100' }, '›')
               ),
               h('div', { className: 'flex flex-wrap gap-2 items-center' },
                 h('label', { className: 'cursor-pointer px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm' },

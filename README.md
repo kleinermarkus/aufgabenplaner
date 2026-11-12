@@ -17,6 +17,8 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 
 Die Schaltflächen über dem Kalender sind in der **empfohlenen monatlichen Reihenfolge** nummeriert: erst Importe, dann Termine generieren, dann Personen zuteilen – mit 5 und 6 lassen sich Zuteilungen bzw. Termine des Monats wieder entfernen.
 
+Nach einem Import erscheint über dem Kalender kurz ein **grünes Banner**, das die Änderungen auflistet – bei Abwesenheiten je Person die neuen Zeiträume, bei Ereignissen Titel, Datum und Uhrzeit. Das Banner verschwindet nach einigen Sekunden automatisch oder per **✕**.
+
 ### 👥 Personen & Matrix
 - **Personen anlegen/verwalten** (Name; jede erhält automatisch eine **eindeutige Farbe**, keine zwei Personen teilen sich einen Farbton)
 - **Qualifikations-Matrix**: Pro Person × Zeitslot × Ort, wer kann was übernehmen
