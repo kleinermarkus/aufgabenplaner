@@ -22,6 +22,9 @@
   <script src="peerjs-1.5.4.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR"></script>
   <script src="qrcode-1.0.0.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU"></script>
   <style>
+    /* Größere Schrift auf großen Monitoren (rem-basierte Größen skalieren mit) */
+    @media screen and (min-width: 1280px) { html { font-size: 17px; } }
+    @media screen and (min-width: 1536px) { html { font-size: 18.5px; } }
     @media print {
       body { background: white !important; color: black !important; font-size: 11pt; }
       header, nav, button, input, select, .no-print { display: none !important; }
@@ -37,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.15';
+    const APP_VERSION = '1.10.16';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1801,10 +1804,10 @@
                 const chipCls = taskChipClass(person ? getPersonColorById(person.id) : null, taskGroupNames.length);
                 return h('div', { key: t.id, className: `p-1 rounded border flex items-center gap-1 min-w-0 ${chipCls}` },
                   taskGroupNames.length > 0 ? taskGroupNames.map((gn, gi) => h('span', { key: gi, title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-white text-blue-800 rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, groupLetter(gn))) : null,
-                  h('span', { className: 'text-[9px] font-bold opacity-90 shrink-0' }, slot?.time || ''),
+                  h('span', { className: 'text-[10px] font-bold opacity-90 shrink-0' }, slot?.time || ''),
                   h('div', { className: 'min-w-0 flex-1 leading-tight' },
-                    h('span', { className: 'text-[11px] font-bold truncate block' }, person ? person.name : (taskGroupNames.length > 1 ? 'Gruppen' : (taskGroupNames.length === 1 ? taskGroupNames[0] : 'Offen'))),
-                    h('span', { className: 'text-[9px] opacity-80 truncate block' }, loc?.name || 'Ort')
+                    h('span', { className: 'text-xs font-bold truncate block' }, person ? person.name : (taskGroupNames.length > 1 ? 'Gruppen' : (taskGroupNames.length === 1 ? taskGroupNames[0] : 'Offen'))),
+                    h('span', { className: 'text-[10px] opacity-80 truncate block' }, loc?.name || 'Ort')
                   )
                 );
               })
@@ -1815,16 +1818,18 @@
                 const slot = timeSlots.find(s => s.id === t.slotId);
                 const person = people.find(p => p.id === t.assignedPersonId);
                 const taskGroupNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
-                const taskGroupInitials = taskGroupNames.map(n => getInitials(n)).join('');
                 const chipCls = taskChipClass(person ? getPersonColorById(person.id) : null, taskGroupNames.length);
                 return h('div', {
                   key: t.id,
-                  title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : (taskGroupNames.length > 0 ? `Gruppentermin: ${taskGroupNames.join(', ')}` : 'Offen'),
+                  title: taskGroupNames.length > 0 ? `Gruppentermin: ${taskGroupNames.join(', ')}${person ? ' · ' + person.name : ''}` : (person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''}` : 'Offen'),
                   className: `px-0.5 py-0.5 rounded border text-center leading-none ${chipCls}`
                 },
-                  h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : (taskGroupNames.length > 1 ? 'Gruppen' : (taskGroupNames.length === 1 ? taskGroupInitials : 'Offen'))),
-                  slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null,
-                  taskGroupNames.length > 0 ? h('div', { className: 'text-[7px] font-bold opacity-80 mt-0.5' }, taskGroupNames.map(n => groupLetter(n)).join('')) : null
+                  taskGroupNames.length > 0
+                    ? h('div', { className: 'flex items-center justify-center gap-0.5 flex-wrap' },
+                        taskGroupNames.map((gn, gi) => h('span', { key: gi, className: 'text-[8px] font-bold bg-white text-blue-800 rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center' }, groupLetter(gn)))
+                      )
+                    : h('div', { className: 'text-[11px] font-bold' }, person ? getInitials(person.name) : 'Offen'),
+                  slot?.time ? h('div', { className: 'text-[8px] font-normal mt-0.5' }, slot.time) : null
                 );
               })
             ) : null
@@ -1936,7 +1941,7 @@
 
         toast ? h('div', { className: `fixed bottom-4 right-4 z-50 px-4 py-2.5 rounded-lg shadow-lg text-white font-medium text-sm ${toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}` }, toast.msg) : null,
 
-        h('main', { className: 'max-w-7xl mx-auto px-3 sm:px-6 mt-4 sm:mt-6 print-container' },
+        h('main', { className: 'max-w-[1800px] mx-auto px-3 sm:px-6 mt-4 sm:mt-6 print-container' },
           activeTab === 'calendar' ? h('div', { className: 'space-y-6' },
             importBanner ? h('div', { className: 'bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl px-4 py-3 shadow-sm no-print flex items-start justify-between gap-3' },
               h('div', { className: 'min-w-0 flex-1' },
