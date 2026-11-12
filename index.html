@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.11.3';
+    const APP_VERSION = '1.11.4';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1292,8 +1292,14 @@
         setAiPhase('loading'); setAiProgress(0); setAiNote('Bibliothek wird geladen…');
         try {
           const webllm = await import('./webllm-0.2.88.min.js');
+          const appConfig = {
+            model_list: webllm.prebuiltAppConfig.model_list.map(m =>
+              m.model_id === aiModelId ? { ...m, overrides: { ...(m.overrides || {}), prefill_chunk_size: 128 } } : m
+            )
+          };
           const engine = await webllm.CreateMLCEngine(aiModelId, {
-            initProgressCallback: (r) => { setAiProgress(r.progress || 0); setAiNote(r.text || ''); }
+            initProgressCallback: (r) => { setAiProgress(r.progress || 0); setAiNote(r.text || ''); },
+            appConfig
           });
           aiEngineRef.current = engine;
           aiLoadedModelRef.current = aiModelId;
@@ -1353,7 +1359,7 @@
             aiEngineRef.current = null;
             aiLoadedModelRef.current = null;
             setAiPhase('error');
-            setAiNote('GPU-Fehler des Ger\u00e4ts/Treibers. Bitte \u201eQwen 0,5B \u2013 32-Bit\u201c w\u00e4hlen und erneut laden; schl\u00e4gt das fehl, unterst\u00fctzt dieses Ger\u00e4t WebGPU leider nicht stabil. (Details: ' + msg + ')');
+            setAiNote('GPU-Fehler des Ger\u00e4ts/Treibers. Bitte \u201eModell laden\u201c erneut dr\u00fccken \u2013 die Last pro Rechenschritt ist jetzt reduziert; bei weiteren Fehlern \u201eQwen 0,5B \u2013 32-Bit\u201c w\u00e4hlen. (Details: ' + msg + ')');
           } else {
             setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + msg }; return cp; });
           }
