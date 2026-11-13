@@ -43,7 +43,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.45';
+    const APP_VERSION = '1.10.46';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -64,6 +64,7 @@
       '1.10.43': ['Alle einzelnen Löschen/Entfernen-Schaltflächen sind jetzt einheitliche Mülleimer-Schaltflächen (🗑️) mit Tooltip – bei Terminen, Personen, Abwesenheiten, Mustern, Orten, Zeitslots, Gruppen und Ereignissen. Die großen Aktionen (Zuteilungen/Termine löschen, Gefahrenzone) bleiben Text-Schaltflächen.'],
       '1.10.44': ['Behoben: Beim Klick auf den Stift bei Terminen und Mustern wurde das Formular sofort mit unveränderten Werten gespeichert („Aufgabe aktualisiert!“/„Muster erfolgreich aktualisiert!“) – jetzt öffnet sich die Bearbeitung korrekt. Die kleinen Symbol-Schaltflächen (✏️ bearbeiten, ✓ speichern, ✕ abbrechen, 🗑️ löschen) sind jetzt überall gleich groß, deutlich als Button erkennbar, verändern sich beim Darüberfahren mit der Maus und sind auf Mobilgeräten touch-freundlich vergrößert; bei Orten und Zeitslots erscheinen ✓/✕ im Bearbeiten-Modus wieder rechtsbuendig.'],
       '1.10.45': ['Der Sync-Knopf ist ohne bestehende Verbindung jetzt ein heller, klar erkennbarer Schaltflaeche mit Umrandung (statt fast schwarz) und hebt sich beim Darueberfahren hervor. Termin-Karten im Tages-Panel erhalten einen Hover-Effekt (heller Hintergrund, Rahmen, Schatten) und zeigen beim Darueberfahren mit der Maus die Stift-Schaltflaeche, um direkt in den Bearbeiten-Modus zu wechseln – auf Mobilgeraeten bleiben die Schaltflaechen dauerhaft sichtbar. Behoben: Der Stift bei Terminen und Mustern bestätigte die Eingabe noch immer sofort – der Speichern-Knopf (✓) ist jetzt bewusst kein Submit-Button an derselben Position wie der Stift mehr, sondern löst das Formular direkt aus; damit öffnet die Bearbeitung zuverlässig.'],
+      '1.10.46': ['Neu: Termine lassen sich im Kalender per Drag & Drop auf einen anderen Tag ziehen – bei gleichem Wochentag wird direkt verschoben, bei anderem Wochentag öffnet sich wie gewohnt der Zeitslot-Dialog. Zieht man einen Termin direkt auf einen anderen, werden die zugeteilten Personen getauscht. Das Datumsfeld im Aufgaben-Panel nutzt jetzt dieselbe Verschiebe-Logik.'],
       '1.10.41': ['Einheitliche Bedienung: Beim Bearbeiten von Terminen und Mustern gibt es jetzt wie in den Stammdaten Stift (✏️), Häkchen (✓ speichern) und ✕ (Abbrechen) statt eines zusätzlichen Speichern-Buttons.'],
       '1.10.40': ['Orte und Zeitslots lassen sich in den Stammdaten jetzt direkt bearbeiten (Stift-Symbol): Orte umbenennen, Wochentag und Uhrzeit eines Zeitslots ändern – ohne Verlust der bestehenden Verknüpfungen zu Mustern, Terminen und Qualifikationen.'],
       '1.10.39': ['Feiertage und Ereignisse stehen jetzt als Chips links neben der Tageszahl im Kalender und nutzen den verfügbaren Platz, statt rechts abgeschnitten zu werden.'],
@@ -551,7 +552,7 @@
     const TUTORIAL_STEPS = [
       { tab: 'calendar', title: 'Willkommen beim Monatsplaner! 📅', text: ['Dieser Planer verteilt Aufgaben automatisch gerecht – unter Berücksichtigung von Abwesenheiten, Qualifikationen und externen Schichten.', 'Alle Daten bleiben in Ihrem Browser; es gibt keinen Server, der sie kennt.', 'Diese Einführung können Sie jederzeit über den ❓-Button in der Kopfzeile erneut öffnen.'] },
       { tab: 'calendar', title: 'Beispieldaten 🧹', text: ['Damit Sie alles gefahrlos ausprobieren können, enthält die frisch installierte App anonyme Beispieldaten.', 'Sie verschwinden automatisch beim ersten Import von Abwesenheiten oder Ereignissen (ein Pop-up fragt vorher nach) – oder einzeln per Mülleimer-Symbol bzw. über die Gefahrenzone in den Stammdaten.'] },
-      { tab: 'calendar', title: 'Planer & Kalender 🗓️', text: ['Der Monatskalender zeigt alle Termine mit farbigen Namens-Chips (mobil als Akronym). Beim Öffnen der App ist der heutige Tag bereits angewählt.', 'Tippen Sie auf einen Tag: rechts öffnet sich das Aufgaben-Panel mit „+ Aufgabe anlegen“, der klickbaren ⭐ Empfehlung und der Verfügbarkeits-Liste mit Gründen (z. B. „Schicht: Früh“ oder „Abwesend/Urlaub“).', 'Die 6 nummerierten Schaltflächen über dem Kalender sind Ihr Monatsrhythmus: erst Importe, dann Termine generieren, dann Personen zuteilen.'] },
+      { tab: 'calendar', title: 'Planer & Kalender 🗓️', text: ['Der Monatskalender zeigt alle Termine mit farbigen Namens-Chips (mobil als Akronym). Beim Öffnen der App ist der heutige Tag bereits angewählt.', 'Tippen Sie auf einen Tag: rechts öffnet sich das Aufgaben-Panel mit „+ Aufgabe anlegen“, der klickbaren ⭐ Empfehlung und der Verfügbarkeits-Liste mit Gründen (z. B. „Schicht: Früh“ oder „Abwesend/Urlaub“).', 'Die 6 nummerierten Schaltflächen über dem Kalender sind Ihr Monatsrhythmus: erst Importe, dann Termine generieren, dann Personen zuteilen.', 'Termine können Sie mit der Maus auf einen anderen Tag ziehen (bei anderem Wochentag fragt die App nach dem Zeitslot). Ziehen Sie einen Termin direkt auf einen anderen, werden die zugeteilten Personen getauscht.'] },
       { tab: 'calendar', title: 'Import aus NW Scheduler 📥', text: ['Die Schaltflächen „1. Abwesenheiten importieren“ und „2. Ereignisse importieren“ sind für den Export aus dem NW Scheduler vorgesehen.', 'Abwesenheiten: NW Scheduler → Berichte → Personen → „Person Abwesenheiten“ → als Dokument (PDF/DOCX) speichern und hier importieren.', 'Ereignisse: Berichte → Versammlung → „Versammlungsereignisse“ mit gewünschtem Zeitraum → als Dokument (DOCX/TXT) speichern und hier importieren.'], images: [{ src: './docs/nw-scheduler-export-abwesenheiten.png', caption: 'NW Scheduler 8.2: Export „Person Abwesenheiten“ (Bericht → Personen)' }, { src: './docs/nw-scheduler-export-ereignisse.png', caption: 'NW Scheduler 8.2: Export „Versammlungsereignisse“ (Bericht → Versammlung, mit Zeitraum)' }] },
       { tab: 'people', title: 'Personen & Qualifikationen 👥', text: ['Legen Sie hier alle Personen an – jede erhält automatisch eine eigene Farbe.', 'In der Qualifikations-Matrix klicken Sie an, wer welchen Zeitslot an welchem Ort übernehmen kann. Nur qualifizierte Personen werden vorgeschlagen.', 'In den Stammdaten legen Sie unter „Orte & Zeitslots verknüpfen“ fest, welche Ort-Zeitslot-Kombinationen überhaupt zulässig sind – die Matrix zeigt nur diese an.', 'Abwesenheiten tragen Sie pro Person ein – oder importieren sie als PDF/DOCX (Schritt 1 über dem Kalender).'] },
       { tab: 'people', title: 'Schichtrhythmus 🔄', text: ['Wer extern im 3-Schicht-System arbeitet, wird automatisch gesperrt, solange eine Schicht läuft.', 'Schichtrhythmus aktivieren, Startdatum angeben und die Reihenfolge anklicken (Kachel: Frei → Früh → Spät → Nacht). Das Muster läuft unbegrenzt weiter.', 'Blockierungen: Früh 06–14 Uhr · Spät 14–22 Uhr · Nacht 22–06 Uhr und am Folgetag bis 14 Uhr.'] },
@@ -580,6 +581,9 @@
       const [moveChoice, setMoveChoice] = useState('existing');
       const [moveSlotId, setMoveSlotId] = useState('');
       const [moveNewTime, setMoveNewTime] = useState('');
+      const [dragTask, setDragTask] = useState(null);        // ID des per Drag & Drop gezogenen Termins
+      const [dragOverDate, setDragOverDate] = useState(null); // Tag-Zelle unter dem Cursor
+      const [dragOverTask, setDragOverTask] = useState(null); // Termin-Chip unter dem Cursor (Personen-Tausch)
       const [newPersonName, setNewPersonName] = useState('');
 
       // Form States
@@ -2168,6 +2172,52 @@
         reader.readAsText(file);
       };
 
+      // Termin auf ein anderes Datum verschieben (Drag & Drop und Datumsfeld nutzen dieselbe Logik):
+      // gleicher Wochentag -> direkt verschieben (Kollision geprueft); anderer Wochentag -> Zeitslot-Dialog
+      const moveTaskToDate = (taskId, nd) => {
+        const task = schedule.find(t => t.id === taskId);
+        if (!task || !nd || nd === task.dateStr) return;
+        const ndDate = parseLocalDate(nd);
+        const oldDow = parseLocalDate(task.dateStr).getDay();
+        const newDow = ndDate.getDay();
+        if (newDow === oldDow) {
+          const slotTime = timeSlots.find(sl => sl.id === task.slotId)?.time;
+          const scope = (task.groupIds || []).slice().sort().join(',');
+          const collision = schedule.some(t => t.id !== task.id && t.dateStr === nd && timeSlots.find(sl => sl.id === t.slotId)?.time === slotTime && (t.groupIds || []).slice().sort().join(',') === scope);
+          if (collision) {
+            showToast('An diesem Datum existiert bereits ein Termin zur gleichen Zeit.', 'error');
+            return;
+          }
+          setSchedule(schedule.map(t => t.id === task.id ? { ...t, dateStr: nd, updatedAt: Date.now() } : t));
+          setSelectedDateStr(nd);
+          setCurrentDate(new Date(ndDate.getFullYear(), ndDate.getMonth(), 1));
+          showToast(`Termin verschoben auf ${ndDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}.`, 'success');
+          return;
+        }
+        const curSlot = timeSlots.find(sl => sl.id === task.slotId);
+        const sameDaySlots = timeSlots.filter(sl => sl.dayOfWeek === newDow).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+        const sameTimeSlot = sameDaySlots.find(sl => sl.time === curSlot?.time);
+        setMoveChoice(sameDaySlots.length > 0 ? 'existing' : 'new');
+        setMoveSlotId(sameTimeSlot ? sameTimeSlot.id : (sameDaySlots[0]?.id || ''));
+        setMoveNewTime(curSlot?.time || '08:00');
+        setMoveDialog({ taskId: task.id, newDateStr: nd });
+      };
+
+      // Zugeteilte Personen zweier Termine tauschen (Termin direkt auf einen anderen gezogen)
+      const swapTaskPersons = (idA, idB) => {
+        const a = schedule.find(t => t.id === idA);
+        const b = schedule.find(t => t.id === idB);
+        if (!a || !b) return;
+        setSchedule(schedule.map(t => {
+          if (t.id === idA) return { ...t, assignedPersonId: b.assignedPersonId ?? null, updatedAt: Date.now() };
+          if (t.id === idB) return { ...t, assignedPersonId: a.assignedPersonId ?? null, updatedAt: Date.now() };
+          return t;
+        }));
+        const nameA = people.find(pp => pp.id === a.assignedPersonId)?.name || 'offen';
+        const nameB = people.find(pp => pp.id === b.assignedPersonId)?.name || 'offen';
+        showToast(`Zugeteilte Personen getauscht: ${nameA} ↔ ${nameB}.`, 'success');
+      };
+
       // Kalenderraster-Berechnung mit vollständigen Wochen (Mo-So)
       const firstDayOfMonth = new Date(year, month, 1);
       const lastDayOfMonth = new Date(year, month + 1, 0);
@@ -2197,9 +2247,19 @@
           h('div', {
             key: dateStr,
             onClick: () => setSelectedDateStr(dateStr),
+            onDragOver: (e) => { if (dragTask) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOverDate !== dateStr) setDragOverDate(dateStr); } },
+            onDragLeave: () => { if (dragOverDate === dateStr) setDragOverDate(null); },
+            onDrop: (e) => {
+              if (!dragTask) return;
+              e.preventDefault();
+              setDragOverDate(null);
+              setDragOverTask(null);
+              moveTaskToDate(dragTask, dateStr);
+              setDragTask(null);
+            },
             className: `min-h-[60px] sm:min-h-24 p-1 sm:p-1.5 border rounded-lg cursor-pointer transition-all flex flex-col justify-between min-w-0 print-day-box ${
               isSelected ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-200' : 'border-slate-200 bg-white hover:border-slate-300'
-            } ${!isCurrentMonth ? 'opacity-40 bg-slate-100/50' : ''} ${holidayName ? 'bg-amber-50/40' : (dayEvents.length > 0 ? 'bg-violet-50/40' : '')}`
+            } ${!isCurrentMonth ? 'opacity-40 bg-slate-100/50' : ''} ${holidayName ? 'bg-amber-50/40' : (dayEvents.length > 0 ? 'bg-violet-50/40' : '')} ${dragTask && dragOverDate === dateStr ? 'ring-2 ring-indigo-400 bg-indigo-50' : ''}`
           },
             h('div', { className: 'flex items-start gap-1 flex-wrap min-w-0' },
               h('span', { className: `text-xs font-bold px-1.5 py-0.5 rounded shrink-0 ${holidayName ? 'bg-amber-200 text-amber-900' : 'text-slate-700'}` }, dayNum),
@@ -2217,7 +2277,24 @@
                 const person = people.find(p => p.id === t.assignedPersonId);
                 const taskGroupNames = (t.groupIds || []).map(gid => groups.find(g => g.id === gid)?.name).filter(Boolean);
                 const chipCls = taskChipClass(person ? getPersonColorById(person.id) : null, taskGroupNames.length);
-                return h('div', { key: t.id, className: `p-1 rounded border flex items-center gap-1 min-w-0 ${chipCls}` },
+                return h('div', {
+                  key: t.id,
+                  draggable: true,
+                  onDragStart: (e) => { setDragTask(t.id); setDragOverDate(null); setDragOverTask(null); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', t.id); } catch (err) {} },
+                  onDragEnd: () => { setDragTask(null); setDragOverDate(null); setDragOverTask(null); },
+                  onDragOver: (e) => { if (dragTask && dragTask !== t.id) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; if (dragOverTask !== t.id) setDragOverTask(t.id); } },
+                  onDrop: (e) => {
+                    if (!dragTask || dragTask === t.id) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDragOverDate(null);
+                    setDragOverTask(null);
+                    swapTaskPersons(dragTask, t.id);
+                    setDragTask(null);
+                  },
+                  title: person ? `${person.name} · ${loc?.name || 'Ort'} ${slot?.time || ''} – zum Verschieben ziehen` : undefined,
+                  className: `p-1 rounded border flex items-center gap-1 min-w-0 cursor-grab active:cursor-grabbing hover:brightness-95 ${chipCls} ${dragTask === t.id ? 'opacity-50' : ''} ${dragOverTask === t.id ? 'ring-2 ring-slate-700/60' : ''}`
+                },
                   taskGroupNames.length > 0 ? taskGroupNames.map((gn, gi) => h('span', { key: gi, title: `Gruppentermin: ${taskGroupNames.join(', ')}`, className: 'text-[8px] font-bold bg-white text-blue-800 rounded-full min-w-[12px] h-[12px] px-0.5 flex items-center justify-center shrink-0' }, groupLetter(gn))) : null,
                   h('span', { className: 'text-[10px] font-bold opacity-90 shrink-0' }, slot?.time || ''),
                   h('div', { className: 'min-w-0 flex-1 leading-tight' },
@@ -2505,27 +2582,7 @@
                             const oldDow = parseLocalDate(task.dateStr).getDay();
                             const newDow = ndDate.getDay();
                             setEditingTask(null);
-                            if (newDow === oldDow) {
-                              const slotTime = timeSlots.find(s => s.id === task.slotId)?.time;
-                              const scope = (task.groupIds || []).slice().sort().join(',');
-                              const collision = schedule.some(t => t.id !== task.id && t.dateStr === nd && timeSlots.find(s => s.id === t.slotId)?.time === slotTime && (t.groupIds || []).slice().sort().join(',') === scope);
-                              if (collision) {
-                                showToast('An diesem Datum existiert bereits ein Termin zur gleichen Zeit.', 'error');
-                                return;
-                              }
-                              setSchedule(schedule.map(t => t.id === task.id ? { ...t, dateStr: nd, updatedAt: Date.now() } : t));
-                              setSelectedDateStr(nd);
-                              setCurrentDate(new Date(ndDate.getFullYear(), ndDate.getMonth(), 1));
-                              showToast(`Termin verschoben auf ${ndDate.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}.`, 'success');
-                              return;
-                            }
-                            const curSlot = timeSlots.find(s => s.id === task.slotId);
-                            const sameDaySlots = timeSlots.filter(s => s.dayOfWeek === newDow).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-                            const sameTimeSlot = sameDaySlots.find(s => s.time === curSlot?.time);
-                            setMoveChoice(sameDaySlots.length > 0 ? 'existing' : 'new');
-                            setMoveSlotId(sameTimeSlot ? sameTimeSlot.id : (sameDaySlots[0]?.id || ''));
-                            setMoveNewTime(curSlot?.time || '08:00');
-                            setMoveDialog({ taskId: task.id, newDateStr: nd });
+                            moveTaskToDate(task.id, nd);
                           },
                           className: 'text-[10px] p-1 border rounded bg-white border-slate-300'
                         })

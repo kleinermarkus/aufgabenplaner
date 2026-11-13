@@ -157,6 +157,7 @@ Gruppentermine zählen dabei nicht mit.
 ## 9. Termine nachträglich ändern
 
 - **Datum ändern**: Jeder Termin hat im Panel ein **Datumsfeld** – einfach ändern, der Kalender springt mit. Fällt der Termin damit auf einen anderen Wochentag, fragt ein Banner, ob ein **vorhandener Zeitslot** des neuen Wochentags genutzt oder ein **neuer Zeitslot** angelegt werden soll – so bleiben die Qualifikationsprüfungen korrekt.
+- **Drag & Drop im Kalender**: Termine lassen sich mit der Maus direkt auf einen anderen Tag ziehen – bei gleichem Wochentag wird sofort verschoben, bei anderem Wochentag öffnet sich derselbe Zeitslot-Dialog wie beim Datumsfeld. Ziehen Sie einen Termin direkt **auf einen anderen Termin**, werden die zugeteilten Personen **getauscht**.
 - **Gruppen ändern**: Die Gruppen-Chips am Termin lassen sich jederzeit anklicken und umschalten (auch mehrere).
 - **Zeitslot/Ort ändern**: ebenfalls im Panel möglich.
 - **Zuteilung ändern**: andere Person anklicken oder mit ✕ freigeben – unbesetzte allgemeine Termine erscheinen **rot** im Kalender.
