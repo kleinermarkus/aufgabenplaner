@@ -2,7 +2,7 @@
 
 Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilung mit Feiertagsunterstützung für alle deutschen Bundesländer (Standard: Sachsen).
 
-> 📘 **Neu hier?** Die Schritt-für-Schritt-Anleitung für Einrichtung und tägliche Nutzung steht im [Tutorial](TUTORIAL.md).
+> 📘 **Neu hier?** Die App führt mit einem **interaktiven Tutorial** ein (öffnet beim ersten Start, jederzeit über den ❓-Button in der Kopfzeile erreichbar). Die Schritt-für-Schritt-Anleitung für Einrichtung und tägliche Nutzung steht im [Tutorial-Dokument](TUTORIAL.md).
 
 ## Funktionsübersicht
 

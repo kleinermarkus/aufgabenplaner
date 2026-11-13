@@ -2,6 +2,8 @@
 
 Schritt-für-Schritt-Anleitung für den Aufgabenplaner. Die ausführliche Funktions- und Technikkreferenz steht in der [README.md](README.md).
 
+> 💡 **In der App gibt es zusätzlich ein interaktives Tutorial:** Es öffnet sich automatisch beim ersten Start und ist jederzeit über den **❓-Button** neben dem Sync-Button in der Kopfzeile erreichbar. Es führt in 11 kurzen Schritten durch alle Bereiche und wechselt dabei automatisch in den passenden Tab.
+
 ---
 
 ## Inhalt
