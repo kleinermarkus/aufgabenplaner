@@ -43,7 +43,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.42';
+    const APP_VERSION = '1.10.43';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -61,6 +61,7 @@
     // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
     const CHANGELOG = {
       '1.10.42': ['Ereignisse lassen sich in den Stammdaten jetzt ebenfalls bearbeiten (Stift-Symbol): Titel, Datum, Zeitraum, Uhrzeit und Notiz ändern – mit den gleichen Symbole wie überall (✏️, ✓, ✕).'],
+      '1.10.43': ['Alle einzelnen Löschen/Entfernen-Schaltflächen sind jetzt einheitliche Mülleimer-Schaltflächen (🗑️) mit Tooltip – bei Terminen, Personen, Abwesenheiten, Mustern, Orten, Zeitslots, Gruppen und Ereignissen. Die großen Aktionen (Zuteilungen/Termine löschen, Gefahrenzone) bleiben Text-Schaltflächen.'],
       '1.10.41': ['Einheitliche Bedienung: Beim Bearbeiten von Terminen und Mustern gibt es jetzt wie in den Stammdaten Stift (✏️), Häkchen (✓ speichern) und ✕ (Abbrechen) statt eines zusätzlichen Speichern-Buttons.'],
       '1.10.40': ['Orte und Zeitslots lassen sich in den Stammdaten jetzt direkt bearbeiten (Stift-Symbol): Orte umbenennen, Wochentag und Uhrzeit eines Zeitslots ändern – ohne Verlust der bestehenden Verknüpfungen zu Mustern, Terminen und Qualifikationen.'],
       '1.10.39': ['Feiertage und Ereignisse stehen jetzt als Chips links neben der Tageszahl im Kalender und nutzen den verfügbaren Platz, statt rechts abgeschnitten zu werden.'],
@@ -534,7 +535,7 @@
     // Interaktives Tutorial: geführte Einführung, wechselt automatisch in den passenden Tab
     const TUTORIAL_STEPS = [
       { tab: 'calendar', title: 'Willkommen beim Monatsplaner! 📅', text: ['Dieser Planer verteilt Aufgaben automatisch gerecht – unter Berücksichtigung von Abwesenheiten, Qualifikationen und externen Schichten.', 'Alle Daten bleiben in Ihrem Browser; es gibt keinen Server, der sie kennt.', 'Diese Einführung können Sie jederzeit über den ❓-Button in der Kopfzeile erneut öffnen.'] },
-      { tab: 'calendar', title: 'Beispieldaten 🧹', text: ['Damit Sie alles gefahrlos ausprobieren können, enthält die frisch installierte App anonyme Beispieldaten.', 'Sie verschwinden automatisch beim ersten Import von Abwesenheiten oder Ereignissen (ein Pop-up fragt vorher nach) – oder einzeln per Löschen bzw. über die Gefahrenzone in den Stammdaten.'] },
+      { tab: 'calendar', title: 'Beispieldaten 🧹', text: ['Damit Sie alles gefahrlos ausprobieren können, enthält die frisch installierte App anonyme Beispieldaten.', 'Sie verschwinden automatisch beim ersten Import von Abwesenheiten oder Ereignissen (ein Pop-up fragt vorher nach) – oder einzeln per Mülleimer-Symbol bzw. über die Gefahrenzone in den Stammdaten.'] },
       { tab: 'calendar', title: 'Planer & Kalender 🗓️', text: ['Der Monatskalender zeigt alle Termine mit farbigen Namens-Chips (mobil als Akronym). Beim Öffnen der App ist der heutige Tag bereits angewählt.', 'Tippen Sie auf einen Tag: rechts öffnet sich das Aufgaben-Panel mit „+ Aufgabe anlegen“, der klickbaren ⭐ Empfehlung und der Verfügbarkeits-Liste mit Gründen (z. B. „Schicht: Früh“ oder „Abwesend/Urlaub“).', 'Die 6 nummerierten Schaltflächen über dem Kalender sind Ihr Monatsrhythmus: erst Importe, dann Termine generieren, dann Personen zuteilen.'] },
       { tab: 'calendar', title: 'Import aus NW Scheduler 📥', text: ['Die Schaltflächen „1. Abwesenheiten importieren“ und „2. Ereignisse importieren“ sind für den Export aus dem NW Scheduler vorgesehen.', 'Abwesenheiten: NW Scheduler → Berichte → Personen → „Person Abwesenheiten“ → als Dokument (PDF/DOCX) speichern und hier importieren.', 'Ereignisse: Berichte → Versammlung → „Versammlungsereignisse“ mit gewünschtem Zeitraum → als Dokument (DOCX/TXT) speichern und hier importieren.'], images: [{ src: './docs/nw-scheduler-export-abwesenheiten.png', caption: 'NW Scheduler 8.2: Export „Person Abwesenheiten“ (Bericht → Personen)' }, { src: './docs/nw-scheduler-export-ereignisse.png', caption: 'NW Scheduler 8.2: Export „Versammlungsereignisse“ (Bericht → Versammlung, mit Zeitraum)' }] },
       { tab: 'people', title: 'Personen & Qualifikationen 👥', text: ['Legen Sie hier alle Personen an – jede erhält automatisch eine eigene Farbe.', 'In der Qualifikations-Matrix klicken Sie an, wer welchen Zeitslot an welchem Ort übernehmen kann. Nur qualifizierte Personen werden vorgeschlagen.', 'In den Stammdaten legen Sie unter „Orte & Zeitslots verknüpfen“ fest, welche Ort-Zeitslot-Kombinationen überhaupt zulässig sind – die Matrix zeigt nur diese an.', 'Abwesenheiten tragen Sie pro Person ein – oder importieren sie als PDF/DOCX (Schritt 1 über dem Kalender).'] },
@@ -2474,7 +2475,7 @@
                             : h('button', { onClick: () => { setEditingTask(task); setEditFormSlotId(task.slotId); }, title: 'Ändern', className: 'text-indigo-600 text-xs hover:text-indigo-800 px-1' }, '✏️'),
                           isEditingThis
                             ? h('button', { onClick: () => setEditingTask(null), title: 'Abbrechen', className: 'text-slate-400 text-base font-bold leading-none px-1' }, '✕')
-                            : h('button', { onClick: () => { markDeleted('schedule', task.id); setSchedule(schedule.filter(t => t.id !== task.id)); }, className: 'text-rose-500 text-xs' }, 'Entfernen')
+                            : h('button', { onClick: () => { markDeleted('schedule', task.id); setSchedule(schedule.filter(t => t.id !== task.id)); }, title: 'Entfernen', className: 'text-rose-500 text-xs hover:text-rose-700 px-1' }, '🗑️')
                         )
                       ),
                       h('div', { className: 'flex items-center gap-1.5' },
@@ -2752,7 +2753,7 @@
                   h('div', { className: 'space-y-3' },
                     h('div', { className: 'font-bold text-sm text-slate-800 flex justify-between items-center' },
                       h('span', null, p.name),
-                      h('button', { onClick: () => { (p.absences || []).forEach(abs => markDeleted('absences', abs.id)); markDeleted('people', p.id); setPeople(people.filter(person => person.id !== p.id)); }, className: 'text-rose-500 text-xs font-normal hover:underline' }, 'Löschen')
+                      h('button', { onClick: () => { (p.absences || []).forEach(abs => markDeleted('absences', abs.id)); markDeleted('people', p.id); setPeople(people.filter(person => person.id !== p.id)); }, title: 'Löschen', className: 'text-rose-500 text-xs font-normal hover:text-rose-700 px-1' }, '🗑️')
                     ),
 
                     // Externes Schichtsystem (Rotation)
@@ -2901,9 +2902,9 @@
                             }, '✏️'),
                             h('button', {
                               onClick: () => { markDeleted('absences', a.id); setPeople([...people].sort((x, y) => x.name.localeCompare(y.name, 'de')).map(person => person.id === p.id ? { ...person, absences: person.absences.filter(abs => abs.id !== a.id) } : person)); },
-                              className: 'text-rose-500 font-bold',
-                              title: 'Löschen'
-                            }, '✕')
+                              title: 'Löschen',
+                              className: 'text-rose-500 font-bold hover:text-rose-700 px-1'
+                            }, '🗑️')
                           )
                         );
                       })
@@ -3073,7 +3074,7 @@
                             }, title: 'Bearbeiten', className: 'text-indigo-600 text-xs hover:text-indigo-800 px-1' }, '✏️'),
                         isEditingThis
                           ? h('button', { onClick: () => setEditingPattern(null), title: 'Abbrechen', className: 'text-slate-400 text-base font-bold leading-none px-1' }, '✕')
-                          : h('button', { onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
+                          : h('button', { onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, title: 'Löschen', className: 'text-rose-500 font-bold text-xs hover:underline hover:text-rose-700 px-1' }, '🗑️')
                       )
                     ),
                     isEditingThis ? h('form', {
@@ -3231,7 +3232,7 @@
                     ) : h('span', { className: 'font-bold min-w-0 truncate' }, l.name),
                     editingLocId === l.id ? null : h('div', { className: 'flex gap-2 shrink-0' },
                       h('button', { onClick: () => { setEditingLocId(l.id); setEditingLocName(l.name); }, className: 'text-indigo-600 font-semibold hover:underline' }, '✏️'),
-                      h('button', { onClick: () => { markDeleted('locations', l.id); setLocations(locations.filter(loc => loc.id !== l.id)); setSettings(prev => prev.slotLocations ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).map(([sid, arr]) => [sid, (arr || []).filter(id => id !== l.id)])), updatedAt: Date.now() } : prev); }, className: 'text-rose-500' }, 'Löschen')
+                      h('button', { onClick: () => { markDeleted('locations', l.id); setLocations(locations.filter(loc => loc.id !== l.id)); setSettings(prev => prev.slotLocations ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).map(([sid, arr]) => [sid, (arr || []).filter(id => id !== l.id)])), updatedAt: Date.now() } : prev); }, title: 'Löschen', className: 'text-rose-500 hover:text-rose-700 px-1' }, '🗑️')
                     )
                   ))
                 )
@@ -3273,7 +3274,7 @@
                     ) : h('span', { className: 'font-bold' }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`),
                     editingSlotId === s.id ? null : h('div', { className: 'flex gap-2 shrink-0' },
                       h('button', { onClick: () => { setEditingSlotId(s.id); setEditingSlotDay(s.dayOfWeek); setEditingSlotTime(s.time); }, className: 'text-indigo-600 font-semibold hover:underline' }, '✏️'),
-                      h('button', { onClick: () => { markDeleted('timeSlots', s.id); setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)); setSettings(prev => prev.slotLocations && prev.slotLocations[s.id] ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).filter(([sid]) => sid !== s.id)), updatedAt: Date.now() } : prev); }, className: 'text-rose-500' }, 'Löschen')
+                      h('button', { onClick: () => { markDeleted('timeSlots', s.id); setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)); setSettings(prev => prev.slotLocations && prev.slotLocations[s.id] ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).filter(([sid]) => sid !== s.id)), updatedAt: Date.now() } : prev); }, title: 'Löschen', className: 'text-rose-500 hover:text-rose-700 px-1' }, '🗑️')
                     )
                   ))
                 )
@@ -3340,7 +3341,7 @@
                 groups.map(g => h('div', { key: g.id, className: 'p-3 border rounded-lg bg-slate-50 space-y-2' },
                   h('div', { className: 'flex justify-between items-center' },
                     h('span', { className: 'font-bold text-xs text-slate-800' }, `${g.name} (${(g.personIds || []).length} Personen)`),
-                    h('button', { onClick: () => handleDeleteGroup(g.id), className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
+                    h('button', { onClick: () => handleDeleteGroup(g.id), title: 'Löschen', className: 'text-rose-500 font-bold text-xs hover:underline hover:text-rose-700 px-1' }, '🗑️')
                   ),
                   h('div', { className: 'flex flex-wrap gap-1' },
                     [...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(p => {
@@ -3400,7 +3401,7 @@
                       ),
                       h('div', { className: 'flex items-center gap-2 shrink-0' },
                         h('button', { onClick: () => { setEditingEventId(ev.id); setEditEventForm({ title: ev.title || '', dateStr: ev.dateStr || '', endDateStr: ev.endDateStr || '', time: ev.time || '', timeEnd: ev.timeEnd || '', note: ev.note || '' }); }, title: 'Bearbeiten', className: 'text-indigo-600 text-xs hover:text-indigo-800 px-1' }, '✏️'),
-                        h('button', { onClick: () => { markDeleted('events', ev.id); setEvents(events.filter(x => x.id !== ev.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
+                        h('button', { onClick: () => { markDeleted('events', ev.id); setEvents(events.filter(x => x.id !== ev.id)); }, title: 'Löschen', className: 'text-rose-500 font-bold text-xs hover:underline hover:text-rose-700 px-1' }, '🗑️')
                       )
                     )
                   );
