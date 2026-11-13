@@ -43,7 +43,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.39';
+    const APP_VERSION = '1.10.40';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -60,6 +60,7 @@
     // „Was ist neu?“ – Änderungen der letzten Versionen; erscheinen nach einem
     // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
     const CHANGELOG = {
+      '1.10.40': ['Orte und Zeitslots lassen sich in den Stammdaten jetzt direkt bearbeiten (Stift-Symbol): Orte umbenennen, Wochentag und Uhrzeit eines Zeitslots ändern – ohne Verlust der bestehenden Verknüpfungen zu Mustern, Terminen und Qualifikationen.'],
       '1.10.39': ['Feiertage und Ereignisse stehen jetzt als Chips links neben der Tageszahl im Kalender und nutzen den verfügbaren Platz, statt rechts abgeschnitten zu werden.'],
       '1.10.38': ['Neu: Rückgängig-Funktion \u2013 nach jeder Änderung erscheint für einige Sekunden ein Banner mit ablaufendem Kreis, über das sich die letzte Änderung zurücknehmen lässt (wird auch auf dem anderen Gerät rückgängig gemacht).'],
       '1.10.37': ['Im Bearbeiten-Formular der Muster werden die Zusatzoptionen (Wochen-Rhythmus, monatliche Optionen) jetzt nur noch angezeigt, wenn die passende Frequenz gewählt ist.'],
@@ -567,6 +568,11 @@
       const [newLocName, setNewLocName] = useState('');
       const [newSlotDay, setNewSlotDay] = useState(1);
       const [newSlotTime, setNewSlotTime] = useState('09:00');
+      const [editingLocId, setEditingLocId] = useState(null);
+      const [editingLocName, setEditingLocName] = useState('');
+      const [editingSlotId, setEditingSlotId] = useState(null);
+      const [editingSlotDay, setEditingSlotDay] = useState(1);
+      const [editingSlotTime, setEditingSlotTime] = useState('09:00');
       const [newPatSlot, setNewPatSlot] = useState('');
       const [newPatLoc, setNewPatLoc] = useState('');
       const [newPatFreq, setNewPatFreq] = useState('weekly');
@@ -1728,6 +1734,25 @@
         const newSlot = { id: `slot-${Date.now()}`, dayOfWeek: day, time: newSlotTime };
         setTimeSlots([...timeSlots, newSlot]);
         showToast(`Zeitslot (${DAY_NAMES[day]} ${newSlotTime}) angelegt.`, 'success');
+      };
+
+      // Ort umbenennen (ID bleibt erhalten, damit Muster/Matrizzen/Verknüpfungen nicht brechen)
+      const handleSaveLocation = () => {
+        const name = editingLocName.trim();
+        if (!editingLocId || !name) return;
+        setLocations(locations.map(l => l.id === editingLocId ? { ...l, name, updatedAt: Date.now() } : l));
+        setEditingLocId(null);
+        showToast(`Ort in "${name}" umbenannt.`, 'success');
+      };
+
+      // Zeitslot ändern (Wochentag/Uhrzeit; ID bleibt erhalten)
+      const handleSaveSlot = () => {
+        if (!editingSlotId || !editingSlotTime) return;
+        const day = parseInt(editingSlotDay, 10);
+        const time = editingSlotTime;
+        setTimeSlots(timeSlots.map(sl => sl.id === editingSlotId ? { ...sl, dayOfWeek: day, time, updatedAt: Date.now() } : sl));
+        setEditingSlotId(null);
+        showToast(`Zeitslot geändert (${DAY_NAMES[day]} ${time} Uhr).`, 'success');
       };
 
       // Muster hinzufügen
@@ -3171,9 +3196,16 @@
                   h('button', { type: 'submit', className: 'bg-indigo-600 text-white text-xs font-bold px-3 py-2 rounded-lg' }, '+ Ort')
                 ),
                 h('div', { className: 'space-y-2' },
-                  locations.map(l => h('div', { key: l.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center text-xs' },
-                    h('span', { className: 'font-bold' }, l.name),
-                    h('button', { onClick: () => { markDeleted('locations', l.id); setLocations(locations.filter(loc => loc.id !== l.id)); setSettings(prev => prev.slotLocations ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).map(([sid, arr]) => [sid, (arr || []).filter(id => id !== l.id)])), updatedAt: Date.now() } : prev); }, className: 'text-rose-500' }, 'Löschen')
+                  locations.map(l => h('div', { key: l.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center gap-2 text-xs' },
+                    editingLocId === l.id ? h('form', { onSubmit: (e) => { e.preventDefault(); handleSaveLocation(); }, className: 'flex-1 flex gap-1 items-center min-w-0' },
+                      h('input', { type: 'text', autoFocus: true, value: editingLocName, onChange: (e) => setEditingLocName(e.target.value), className: 'text-xs p-1.5 border rounded bg-white border-indigo-400 flex-1 min-w-0' }),
+                      h('button', { type: 'submit', className: 'text-emerald-600 font-bold px-1' }, '✓'),
+                      h('button', { type: 'button', onClick: () => setEditingLocId(null), className: 'text-slate-400 font-bold px-1' }, '✕')
+                    ) : h('span', { className: 'font-bold min-w-0 truncate' }, l.name),
+                    editingLocId === l.id ? null : h('div', { className: 'flex gap-2 shrink-0' },
+                      h('button', { onClick: () => { setEditingLocId(l.id); setEditingLocName(l.name); }, className: 'text-indigo-600 font-semibold hover:underline' }, '✏️'),
+                      h('button', { onClick: () => { markDeleted('locations', l.id); setLocations(locations.filter(loc => loc.id !== l.id)); setSettings(prev => prev.slotLocations ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).map(([sid, arr]) => [sid, (arr || []).filter(id => id !== l.id)])), updatedAt: Date.now() } : prev); }, className: 'text-rose-500' }, 'Löschen')
+                    )
                   ))
                 )
               ),
@@ -3203,9 +3235,19 @@
                   h('button', { type: 'submit', className: 'bg-indigo-600 text-white text-xs font-bold px-3 py-2 rounded-lg h-9' }, '+ Slot')
                 ),
                 h('div', { className: 'space-y-2' },
-                  timeSlots.map(s => h('div', { key: s.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center text-xs' },
-                    h('span', { className: 'font-bold' }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`),
-                    h('button', { onClick: () => { markDeleted('timeSlots', s.id); setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)); setSettings(prev => prev.slotLocations && prev.slotLocations[s.id] ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).filter(([sid]) => sid !== s.id)), updatedAt: Date.now() } : prev); }, className: 'text-rose-500' }, 'Löschen')
+                  timeSlots.map(s => h('div', { key: s.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center gap-2 text-xs' },
+                    editingSlotId === s.id ? h('form', { onSubmit: (e) => { e.preventDefault(); handleSaveSlot(); }, className: 'flex-1 flex gap-1 items-center min-w-0' },
+                      h('select', { value: editingSlotDay, onChange: (e) => setEditingSlotDay(e.target.value), className: 'text-xs p-1.5 border rounded bg-white border-indigo-400' },
+                        DAY_ORDER.map(idx => h('option', { key: idx, value: idx }, DAY_NAMES[idx]))
+                      ),
+                      h('input', { type: 'time', autoFocus: true, value: editingSlotTime, onChange: (e) => setEditingSlotTime(e.target.value), className: 'text-xs p-1.5 border rounded bg-white border-indigo-400' }),
+                      h('button', { type: 'submit', className: 'text-emerald-600 font-bold px-1' }, '✓'),
+                      h('button', { type: 'button', onClick: () => setEditingSlotId(null), className: 'text-slate-400 font-bold px-1' }, '✕')
+                    ) : h('span', { className: 'font-bold' }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`),
+                    editingSlotId === s.id ? null : h('div', { className: 'flex gap-2 shrink-0' },
+                      h('button', { onClick: () => { setEditingSlotId(s.id); setEditingSlotDay(s.dayOfWeek); setEditingSlotTime(s.time); }, className: 'text-indigo-600 font-semibold hover:underline' }, '✏️'),
+                      h('button', { onClick: () => { markDeleted('timeSlots', s.id); setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)); setSettings(prev => prev.slotLocations && prev.slotLocations[s.id] ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).filter(([sid]) => sid !== s.id)), updatedAt: Date.now() } : prev); }, className: 'text-rose-500' }, 'Löschen')
+                    )
                   ))
                 )
               )

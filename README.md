@@ -35,7 +35,7 @@ Nach einem Import erscheint über dem Kalender kurz ein **grünes Banner**, das 
 - Einsätze je Person **gesamt und je Wochentag** über den gesamten Plan
 
 ### ⚙️ Stammdaten & Export
-- **Orte** und **Zeitslots** verwalten (Wochentag + Uhrzeit)
+- **Orte** und **Zeitslots** verwalten (Wochentag + Uhrzeit) – auch direkt **bearbeiten** (Stift-Symbol): Orte umbenennen, Wochentag/Uhrzeit ändern, ohne dass Verknüpfungen zu Mustern, Terminen und Qualifikationen verloren gehen
 - **Orte & Zeitslots verknüpfen**: Matrix in den Stammdaten, die festlegt, welche Orte für welchen Zeitslot zulässig sind; die Personen-Matrix und die Ort-Auswahl beim Bearbeiten von Terminen und Mustern zeigen nur freigegebene Kombinationen (ohne Festlegung: alle Kombinationen zulässig). Wird über die Geräte-Synchronisierung übertragen.
 - **Gruppen verwalten**: Anlegen, Mitglieder zuordnen; Löschen entfernt die Gruppe aus allen Terminen/Mustern
 - **Bundesland** für die gesetzlichen Feiertage (16 Länder, Standard Sachsen)
