@@ -47,6 +47,7 @@ Alles Grundlegende finden Sie im Tab **⚙️ Stammdaten & Export**:
 1. **Orte** anlegen (z. B. „Hauptsaal", „Nebenzimmer") – wo finden Aufgaben statt?
 2. **Zeitslots** anlegen (Wochentag + Uhrzeit, z. B. „Dienstag 09:00") – wann finden Aufgaben statt?
 3. **Bundesland** wählen (für die Feiertage im Kalender, Standard: Sachsen).
+4. **Gruppen-Termine: Verteilung** – hier stellen Sie ein, ob Gruppentermine automatisch zugeteilt werden und ob sie in die Verteilungsbilanz einfließen (beides standardmäßig aus, siehe Kapitel 5).
 
 Orte und Zeitslots brauchen Sie, bevor Sie Muster und Termine anlegen können – die Qualifikations-Matrix bezieht sich immer auf eine Kombination aus Zeitslot und Ort.
 
@@ -82,7 +83,11 @@ In der Verfügbarkeits-Liste steht dann z. B. „Schicht: Früh (06–14 Uhr)" a
 Im Tab **⚙️ Stammdaten & Export** können Sie **Gruppen** erstellen (z. B. „Gruppe Nord") und Personen zuordnen.
 
 - Einzel- und wiederkehrende Termine können **optional** für eine oder mehrere Gruppen relevant sein.
-- **Gruppentermine laufen „außer Konkurrenz"**: Sie werden automatisch angelegt, bekommen aber **nie automatisch eine Person** – die Zuteilung erfolgt manuell. Sie zählen auch nicht in die Verteilungsbilanz anderer Termine.
+- **Gruppentermine laufen standardmäßig „außer Konkurrenz"**: Sie werden automatisch angelegt, bekommen aber **keine automatische Person** – die Zuteilung erfolgt manuell, und sie zählen nicht in die Verteilungsbilanz anderer Termine.
+- **Beides lässt sich in den Stammdaten umstellen** (⚙️ Stammdaten & Export → Karte „Gruppen-Termine: Verteilung"):
+  - ☑️ **„Gruppentermine automatisch zuteilen"** – „4. Personen zuteilen" besetzt dann auch Gruppentermine, ausschließlich mit Personen aus den relevanten Gruppen (Qualifikation und Verfügbarkeit bleiben maßgeblich).
+  - ☑️ **„Gruppentermine in die Verteilungsbilanz einbeziehen"** – Zuteilungen an Gruppenterminen zählen dann mit und beeinflussen Empfehlung und automatische Verteilung.
+  - Die Einstellungen werden mit den Daten synchronisiert; wer mehr Gruppenaufgaben übernimmt, bekommt bei eingeschalteter Bilanz automatisch weniger allgemeine Termine.
 - Wer an einem Tag einen Gruppentermin hat, wird an dem Tag nicht für allgemeine Termine eingeteilt.
 - Im Kalender sind Gruppentermine **blau** (bei mehreren Gruppen **dunkelblau**) und zeigen links einen Ein-Buchstaben-Chip je Gruppe; ohne Zuteilung steht dort der Gruppenname bzw. „Gruppen".
 
@@ -117,6 +122,15 @@ Die Schaltflächen über dem Kalender sind genau in der Reihenfolge nummeriert, 
 | 6️⃣ | **Termine löschen** | Alle Termine des angezeigten Monats entfernen (Neuanfang) |
 
 Nach jedem Import erscheint kurz ein **grünes Banner**, das die Änderungen auflistet.
+
+**Die Importe sind für den Export aus dem NW Scheduler vorgesehen:**
+
+- **Abwesenheiten:** NW Scheduler → **Berichte → Personen → „Person Abwesenheiten"** → rechts als **Dokument** speichern (PDF oder DOCX) → Datei in der App bei Schritt 1 auswählen.
+- **Ereignisse:** NW Scheduler → **Berichte → Versammlung → „Versammlungsereignisse"** → Zeitraum wählen (z. B. November 2026 – April 2027) → als **Dokument** speichern (DOCX oder TXT) → Datei bei Schritt 2 auswählen.
+
+![NW Scheduler: Export der Person-Abwesenheiten](docs/nw-scheduler-export-abwesenheiten.png)
+
+![NW Scheduler: Export der Versammlungsereignisse](docs/nw-scheduler-export-ereignisse.png)
 
 **Typischer Monatsablauf:** 1 → 2 → 3 → 4. Bereits zugewiesene Termine lässt „4. Personen zuteilen“ unangetastet – nur offene Termine werden gefüllt. Wenn Sie **alles** neu verteilen lassen wollen (z. B. weil Abwesenheiten nachkommen): erst 5 (alle Zuteilungen des Monats freigeben, auch manuelle), dann 4 – und manuelle Sonderfälle danach wieder zuweisen (siehe Kapitel 8).
 

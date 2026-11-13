@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.11.7';
+    const APP_VERSION = '1.11.8';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -510,6 +510,7 @@
         })(),
         events: cut(data.events, () => false),
         tombstones: data.tombstones,
+        settings: data.settings,
         appVersion: data.appVersion
       };
       return { cleaned, removed };
@@ -520,11 +521,12 @@
       { tab: 'calendar', title: 'Willkommen beim Monatsplaner! 📅', text: ['Dieser Planer verteilt Aufgaben automatisch gerecht – unter Berücksichtigung von Abwesenheiten, Qualifikationen und externen Schichten.', 'Alle Daten bleiben in Ihrem Browser; es gibt keinen Server, der sie kennt.', 'Diese Einführung können Sie jederzeit über den ❓-Button in der Kopfzeile erneut öffnen.'] },
       { tab: 'calendar', title: 'Beispieldaten 🧹', text: ['Damit Sie alles gefahrlos ausprobieren können, enthält die frisch installierte App anonyme Beispieldaten.', 'Sie verschwinden automatisch beim ersten Import von Abwesenheiten oder Ereignissen (ein Pop-up fragt vorher nach) – oder einzeln per Löschen bzw. über die Gefahrenzone in den Stammdaten.'] },
       { tab: 'calendar', title: 'Planer & Kalender 🗓️', text: ['Der Monatskalender zeigt alle Termine mit farbigen Namens-Chips (mobil als Akronym).', 'Tippen Sie auf einen Tag: rechts öffnet sich das Aufgaben-Panel mit „+ Aufgabe anlegen“, der klickbaren ⭐ Empfehlung und der Verfügbarkeits-Liste mit Gründen (z. B. „Schicht: Früh“ oder „Abwesend/Urlaub“).', 'Die 6 nummerierten Schaltflächen über dem Kalender sind Ihr Monatsrhythmus: erst Importe, dann Termine generieren, dann Personen zuteilen.'] },
+      { tab: 'calendar', title: 'Import aus NW Scheduler 📥', text: ['Die Schaltflächen „1. Abwesenheiten importieren“ und „2. Ereignisse importieren“ sind für den Export aus dem NW Scheduler vorgesehen.', 'Abwesenheiten: NW Scheduler → Berichte → Personen → „Person Abwesenheiten“ → als Dokument (PDF/DOCX) speichern und hier importieren.', 'Ereignisse: Berichte → Versammlung → „Versammlungsereignisse“ mit gewünschtem Zeitraum → als Dokument (DOCX/TXT) speichern und hier importieren.'], images: [{ src: './docs/nw-scheduler-export-abwesenheiten.png', caption: 'NW Scheduler 8.2: Export „Person Abwesenheiten“ (Bericht → Personen)' }, { src: './docs/nw-scheduler-export-ereignisse.png', caption: 'NW Scheduler 8.2: Export „Versammlungsereignisse“ (Bericht → Versammlung, mit Zeitraum)' }] },
       { tab: 'people', title: 'Personen & Qualifikationen 👥', text: ['Legen Sie hier alle Personen an – jede erhält automatisch eine eigene Farbe.', 'In der Qualifikations-Matrix klicken Sie an, wer welchen Zeitslot an welchem Ort übernehmen kann. Nur qualifizierte Personen werden vorgeschlagen.', 'Abwesenheiten tragen Sie pro Person ein – oder importieren sie als PDF/DOCX (Schritt 1 über dem Kalender).'] },
       { tab: 'people', title: 'Schichtrhythmus 🔄', text: ['Wer extern im 3-Schicht-System arbeitet, wird automatisch gesperrt, solange eine Schicht läuft.', 'Schichtrhythmus aktivieren, Startdatum angeben und die Reihenfolge anklicken (Kachel: Frei → Früh → Spät → Nacht). Das Muster läuft unbegrenzt weiter.', 'Blockierungen: Früh 06–14 Uhr · Spät 14–22 Uhr · Nacht 22–06 Uhr und am Folgetag bis 14 Uhr.'] },
-      { tab: 'patterns', title: 'Wiederkehrende Muster 🔁', text: ['Hier legen Sie fest, welche Termine regelmäßig entstehen: wöchentlich, alle 2 Wochen (Kalenderwochen-Parität) oder monatlich.', 'Monatlich geht beides: fester Tag des Monats (z. B. der 15.) oder „x. Wochentag im Monat“ (z. B. 1. Dienstag).', 'Optional: Termine für eine oder mehrere Gruppen relevant machen – Gruppentermine laufen „außer Konkurrenz“ und bekommen nie automatisch eine Person.'] },
+      { tab: 'patterns', title: 'Wiederkehrende Muster 🔁', text: ['Hier legen Sie fest, welche Termine regelmäßig entstehen: wöchentlich, alle 2 Wochen (Kalenderwochen-Parität) oder monatlich.', 'Monatlich geht beides: fester Tag des Monats (z. B. der 15.) oder „x. Wochentag im Monat“ (z. B. 1. Dienstag).', 'Optional: Termine für eine oder mehrere Gruppen relevant machen – Gruppentermine laufen standardmäßig „außer Konkurrenz“ (keine automatische Zuteilung, keine Bilanz); beides lässt sich in den Stammdaten umstellen.'] },
       { tab: 'stats', title: 'Statistik 📊', text: ['Hier sehen Sie pro Person, wie oft sie eingeteilt wurde – so prüfen Sie, ob die Verteilung ausgeglichen ist.', 'Die automatische Zuteilung bevorzugt die längste Pause, dann die geringste Gesamtzahl, dann Wochentags-Balance.'] },
-      { tab: 'settings', title: 'Stammdaten & Export ⚙️', text: ['Orte, Zeitslots und Gruppen verwalten, das Bundesland für die Feiertage wählen.', 'Dazu: Backup exportieren/importieren (regelmäßig sichern!) und die Gefahrenzone zum kompletten Zurücksetzen.'] },
+      { tab: 'settings', title: 'Stammdaten & Export ⚙️', text: ['Orte, Zeitslots und Gruppen verwalten, das Bundesland für die Feiertage wählen.', 'Dazu: Backup exportieren/importieren (regelmäßig sichern!) und die Gefahrenzone zum kompletten Zurücksetzen.', 'In der Karte „Gruppen-Termine: Verteilung“ stellen Sie ein, ob Gruppentermine automatisch zugeteilt werden und ob sie in die Verteilungsbilanz einfließen (Standard: außer Konkurrenz).'] },
       { tab: 'calendar', title: 'Zwei Geräte koppeln 🔄', text: ['Der 🔄 Sync-Button in der Kopfzeile verbindet zwei Geräte direkt (ohne Server).', 'Einfach Code erzeugen und per QR-Scan oder Schlüssel-Textfeld auf dem zweiten Gerät verbinden – danach synchronisiert alles automatisch in beide Richtungen, dauerhaft.', 'Im Sync-Dialog führt ein Protokoll Buch, was übertragen wurde.'] },
       { tab: 'calendar', title: 'Als App installieren 📲', text: ['Die App ist als PWA installierbar und läuft danach auch offline (Android: Menü → „App installieren“ · iPhone: Teilen → „Zum Home-Bildschirm“).', 'Erscheint eine neue Version, meldet das gelbe Update-Banner oben – „Jetzt aktualisieren“ lädt sie.', 'Die Versionsnummer steht klein neben dem Sync-Button.'] },
       { tab: 'calendar', title: 'Los geht’s! ✅', text: ['Viel Erfolg beim Planen!', 'Diese Einführung können Sie jederzeit über den ❓-Button in der Kopfzeile erneut öffnen – Details stehen auch im Tutorial-Dokument und in der README.'] }
@@ -585,6 +587,16 @@
       const [syncLog, setSyncLog] = useState(() => JSON.parse(localStorage.getItem('app_synclog')) || []);
       const [bundesland, setBundesland] = useState(() => localStorage.getItem('app_bundesland') || 'SN');
       useEffect(() => localStorage.setItem('app_bundesland', bundesland), [bundesland]);
+
+      // Gruppen-Optionen: automatische Zuteilung von Gruppenterminen + ob sie in die Verteilungsbilanz zählen
+      const [settings, setSettings] = useState(() => {
+        try {
+          const stored = JSON.parse(localStorage.getItem('app_settings'));
+          if (stored && typeof stored === 'object' && !Array.isArray(stored)) return { autoAssignGroups: false, groupsCountInStats: false, updatedAt: 0, ...stored };
+        } catch (err) {}
+        return { autoAssignGroups: false, groupsCountInStats: false, updatedAt: 0 };
+      });
+      useEffect(() => localStorage.setItem('app_settings', JSON.stringify(settings)), [settings]);
       const [groups, setGroups] = useState(() => JSON.parse(localStorage.getItem('app_groups')) || INITIAL_GROUPS);
       const [events, setEvents] = useState(() => JSON.parse(localStorage.getItem('app_events')) || []);
       useEffect(() => localStorage.setItem('app_groups', JSON.stringify(groups)), [groups]);
@@ -692,7 +704,7 @@
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
       const SYNC_PREFIX = 'aufgabenplaner-';
 
-      const collectSyncData = () => stripDemoData({ appVersion: APP_VERSION, locations, timeSlots, patterns, groups, people, schedule, events, tombstones }).cleaned;
+      const collectSyncData = () => stripDemoData({ appVersion: APP_VERSION, locations, timeSlots, patterns, groups, people, schedule, events, settings, tombstones }).cleaned;
 
       const mergeById = (local, incoming) => {
         const map = new Map((local || []).map(item => [item.id, item]));
@@ -868,6 +880,10 @@
           });
           const nextPeople = [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'de'));
           if (stableStringify(nextPeople) !== stableStringify(basePeople)) { changed = true; setPeople(nextPeople); }
+        }
+        if (incoming.settings && typeof incoming.settings === 'object' && !Array.isArray(incoming.settings)) {
+          const incSettings = incoming.settings;
+          setSettings(prev => (incSettings.updatedAt || 0) > (prev.updatedAt || 0) ? { autoAssignGroups: false, groupsCountInStats: false, updatedAt: 0, ...incSettings } : prev);
         }
         if (stableStringify(mergedTombstones) !== stableStringify(tombstones)) {
           changed = true;
@@ -1113,7 +1129,7 @@
           }
         }, 500);
         return () => clearTimeout(timer);
-      }, [locations, timeSlots, patterns, people, schedule, tombstones]);
+      }, [locations, timeSlots, patterns, people, schedule, tombstones, settings]);
 
       // Dauerhafte Kopplung: Gespeicherte Sync-Verbindung beim Start automatisch wiederherstellen
       useEffect(() => {
@@ -1222,8 +1238,8 @@
         });
         scheduleList.forEach(t => {
           if (!t.assignedPersonId || t.id === excludeTaskId || counts[t.assignedPersonId] === undefined) return;
-          // Gruppen-Termine laufen außer Konkurrenz: Zuteilungen dort zählen in keiner Bilanz
-          if (Array.isArray(t.groupIds) && t.groupIds.length > 0) return;
+          // Gruppen-Termine: außer Konkurrenz (Standard) oder in die Bilanz einbezogen (Einstellung in den Stammdaten)
+          if (Array.isArray(t.groupIds) && t.groupIds.length > 0 && !settings.groupsCountInStats) return;
           counts[t.assignedPersonId]++;
           const wDay = parseLocalDate(t.dateStr).getDay();
           weekdayCounts[t.assignedPersonId][wDay] = (weekdayCounts[t.assignedPersonId][wDay] || 0) + 1;
@@ -1305,6 +1321,18 @@
         return lines.join('\n');
       };
 
+      // Verständliche Fehlermeldungen für typische WebGPU-/Engine-Probleme
+      const friendlyAiError = (msg) => {
+        const m = String(msg || '');
+        if (/compatible GPU|no GPU|GPU not|WebGPU is not/i.test(m)) {
+          return 'WebGPU ist gerade nicht verfügbar. Nach einem GPU-Fehler sperrt der Browser die Schnittstelle meist bis zum Neustart – bitte den Browser komplett schließen und neu öffnen. Falls es dann immer noch nicht geht: unter webgpureport.org prüfen, ob WebGPU unterstützt wird.';
+        }
+        if (/already been disposed|unmapped|GPUBuffer|device lost/i.test(m)) {
+          return 'Die Verbindung des Modells zur GPU wurde zwischenzeitlich getrennt (typisch nach einem Grafiktreiber-Fehler). Bitte „Modell laden“ erneut drücken und die Frage noch einmal stellen – hilft das nicht, den Browser einmal komplett neu starten.';
+        }
+        return m;
+      };
+
       const loadAssistantModel = async () => {
         if (!navigator.gpu) { setAiPhase('nogpu'); return; }
         if (aiEngineRef.current && aiLoadedModelRef.current === aiModelId) { setAiPhase('ready'); return; }
@@ -1324,7 +1352,7 @@
         } catch (err) {
           console.error(err);
           setAiPhase('error');
-          setAiNote(String(err?.message || err));
+          setAiNote(friendlyAiError(String(err?.message || err)));
         }
       };
 
@@ -1354,7 +1382,7 @@
           }
         } catch (err) {
           console.error(err);
-          setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + (err?.message || err) }; return cp; });
+          setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + friendlyAiError(err?.message || err) }; return cp; });
         }
         setAiBusy(false);
       };
@@ -1532,10 +1560,10 @@
         }
 
         // Fairness-Statistiken: alle vorhandenen Einteilungen zählen – Vergangenheit und Zukunft,
-        // manuell und automatisch; nur Gruppentermine laufen außer Konkurrenz
+        // manuell und automatisch; Gruppentermine nur bei eingeschalteter Einstellung
         const stats = buildAssignmentStats([], people, null, null);
         updatedSchedule.forEach(t => {
-          if (Array.isArray(t.groupIds) && t.groupIds.length > 0) return;
+          if (Array.isArray(t.groupIds) && t.groupIds.length > 0 && !settings.groupsCountInStats) return;
           if (t.assignedPersonId && stats.counts[t.assignedPersonId] !== undefined) {
             stats.counts[t.assignedPersonId]++;
             const wDay = parseLocalDate(t.dateStr).getDay();
@@ -1545,20 +1573,34 @@
         });
         Object.values(stats.dates).forEach(list => list.sort());
 
+        // Wer an einem Tag einen Gruppentermin hat, wird an dem Tag nicht für allgemeine Termine eingeteilt
+        const groupBusyDates = {};
+        updatedSchedule.forEach(t => {
+          if (t.assignedPersonId && Array.isArray(t.groupIds) && t.groupIds.length > 0) (groupBusyDates[t.assignedPersonId] = groupBusyDates[t.assignedPersonId] || []).push(t.dateStr);
+        });
+
         let assignedCount = 0;
+        let autoGroupCount = 0;
         updatedSchedule = updatedSchedule.map(task => {
           if (task.assignedPersonId) return task;
-          // Gruppen-Termine werden nur manuell zugeteilt
-          if (Array.isArray(task.groupIds) && task.groupIds.length > 0) return task;
+          const isGroupTask = Array.isArray(task.groupIds) && task.groupIds.length > 0;
+          // Gruppen-Termine: außer Konkurrenz nur manuell – oder automatisch, wenn in den Stammdaten eingeschaltet
+          if (isGroupTask && !settings.autoAssignGroups) return task;
 
           const candidates = people.filter(p => {
             const details = getPersonAvailabilityDetails(p, task.slotId, task.locationId, task.dateStr, task.groupIds);
-            return details.isAvailable;
+            if (!details.isAvailable) return false;
+            if ((groupBusyDates[p.id] || []).includes(task.dateStr)) return false;
+            return true;
           });
 
           if (candidates.length > 0) {
             const chosen = sortCandidatesByFairness(candidates, task, stats)[0];
             const taskWDay = parseLocalDate(task.dateStr).getDay();
+            if (isGroupTask) {
+              (groupBusyDates[chosen.id] = groupBusyDates[chosen.id] || []).push(task.dateStr);
+              autoGroupCount++;
+            }
             stats.counts[chosen.id]++;
             stats.weekdayCounts[chosen.id][taskWDay] = (stats.weekdayCounts[chosen.id][taskWDay] || 0) + 1;
             stats.dates[chosen.id].push(task.dateStr);
@@ -1569,7 +1611,7 @@
         });
 
         setSchedule(updatedSchedule);
-        showToast(`${assignedCount} Aufgaben zugeteilt – längste Pause zuerst, dann Gesamtbilanz und Wochentags-Balance.`, 'success');
+        showToast(`${assignedCount} Aufgaben zugeteilt – längste Pause zuerst, dann Gesamtbilanz und Wochentags-Balance.` + (autoGroupCount > 0 ? ` Davon ${autoGroupCount} Gruppentermine.` : ''), 'success');
       };
 
       // PDF Drucken / Exportieren
@@ -2194,6 +2236,12 @@
             h('div', { className: 'space-y-2 mb-4' },
               TUTORIAL_STEPS[tutorialStep].text.map((t, i) => h('p', { key: i, className: 'text-sm text-slate-700 leading-relaxed' }, t))
             ),
+            TUTORIAL_STEPS[tutorialStep].images ? h('div', { className: 'space-y-2 mb-4' },
+              TUTORIAL_STEPS[tutorialStep].images.map((img, i) => h('figure', { key: i, className: 'border border-slate-200 rounded-lg overflow-hidden' },
+                h('img', { src: img.src, alt: img.caption, className: 'w-full block' }),
+                h('figcaption', { className: 'text-[10px] text-slate-500 px-2 py-1 bg-slate-50' }, img.caption)
+              ))
+            ) : null,
             h('div', { className: 'flex gap-1.5 mb-4' },
               TUTORIAL_STEPS.map((_, i) => h('div', { key: i, className: `h-1.5 flex-1 rounded-full ${i <= tutorialStep ? 'bg-indigo-500' : 'bg-slate-200'}` }))
             ),
@@ -2288,6 +2336,7 @@
                 h('button', { onClick: handleClearAllSchedule, className: 'px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm' }, '6. Termine löschen')
               )
             ),
+            h('p', { className: 'text-[11px] text-slate-500 no-print' }, '📥 Die Importe (1 und 2) sind für den Export aus dem NW Scheduler vorgesehen: Abwesenheiten über „Bericht → Personen → Person Abwesenheiten“ (als Dokument speichern), Ereignisse über „Bericht → Versammlung → Versammlungsereignisse“ mit gewähltem Zeitraum (als Dokument speichern).'),
 
             // Druckkopf für PDF Export
             h('div', { className: 'hidden print:block text-center mb-4' },
@@ -3170,6 +3219,25 @@
                   h('button', { onClick: () => { markDeleted('events', ev.id); setEvents(events.filter(x => x.id !== ev.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline shrink-0' }, 'Löschen')
                 ))
               ) : h('p', { className: 'text-xs text-slate-500' }, 'Noch keine Ereignisse importiert. Importierte Ereignisse erscheinen wie Feiertage im Kalender und werden mitgesynct.')
+            ),
+
+            h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-3' },
+              h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Gruppen-Termine: Verteilung'),
+              h('p', { className: 'text-xs text-slate-500' }, 'Festlegen, wie Gruppentermine in die automatische Verteilung einfließen (gilt für „4. Personen zuteilen“ und die ⭐ Empfehlung). Die Einstellung wird mit den Daten synchronisiert.'),
+              h('label', { className: 'flex items-start gap-3 cursor-pointer p-2 rounded-lg hover:bg-slate-50' },
+                h('input', { type: 'checkbox', checked: settings.autoAssignGroups, onChange: () => setSettings(prev => ({ ...prev, autoAssignGroups: !prev.autoAssignGroups, updatedAt: Date.now() })), className: 'mt-0.5 w-4 h-4 accent-indigo-600' }),
+                h('span', null,
+                  h('span', { className: 'text-sm font-bold text-slate-800 block' }, 'Gruppentermine automatisch zuteilen'),
+                  h('span', { className: 'text-xs text-slate-500' }, 'Standardmäßig aus: Gruppentermine werden nur manuell zugeteilt. Aktiviert: „4. Personen zuteilen“ besetzt auch Gruppentermine – ausschließlich mit Personen aus den relevanten Gruppen; Qualifikation und Verfügbarkeit bleiben maßgeblich.')
+                )
+              ),
+              h('label', { className: 'flex items-start gap-3 cursor-pointer p-2 rounded-lg hover:bg-slate-50' },
+                h('input', { type: 'checkbox', checked: settings.groupsCountInStats, onChange: () => setSettings(prev => ({ ...prev, groupsCountInStats: !prev.groupsCountInStats, updatedAt: Date.now() })), className: 'mt-0.5 w-4 h-4 accent-indigo-600' }),
+                h('span', null,
+                  h('span', { className: 'text-sm font-bold text-slate-800 block' }, 'Gruppentermine in die Verteilungsbilanz einbeziehen'),
+                  h('span', { className: 'text-xs text-slate-500' }, 'Standardmäßig aus: Gruppentermine laufen „außer Konkurrenz“ – sie zählen weder in die Empfehlung noch in die automatische Verteilung. Aktiviert: Zuteilungen an Gruppenterminen zählen mit und beeinflussen die gerechte Verteilung.')
+                )
+              )
             ),
 
             h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
