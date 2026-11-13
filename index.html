@@ -43,7 +43,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.41';
+    const APP_VERSION = '1.10.42';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -60,6 +60,7 @@
     // „Was ist neu?“ – Änderungen der letzten Versionen; erscheinen nach einem
     // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
     const CHANGELOG = {
+      '1.10.42': ['Ereignisse lassen sich in den Stammdaten jetzt ebenfalls bearbeiten (Stift-Symbol): Titel, Datum, Zeitraum, Uhrzeit und Notiz ändern – mit den gleichen Symbole wie überall (✏️, ✓, ✕).'],
       '1.10.41': ['Einheitliche Bedienung: Beim Bearbeiten von Terminen und Mustern gibt es jetzt wie in den Stammdaten Stift (✏️), Häkchen (✓ speichern) und ✕ (Abbrechen) statt eines zusätzlichen Speichern-Buttons.'],
       '1.10.40': ['Orte und Zeitslots lassen sich in den Stammdaten jetzt direkt bearbeiten (Stift-Symbol): Orte umbenennen, Wochentag und Uhrzeit eines Zeitslots ändern – ohne Verlust der bestehenden Verknüpfungen zu Mustern, Terminen und Qualifikationen.'],
       '1.10.39': ['Feiertage und Ereignisse stehen jetzt als Chips links neben der Tageszahl im Kalender und nutzen den verfügbaren Platz, statt rechts abgeschnitten zu werden.'],
@@ -574,6 +575,8 @@
       const [editingSlotId, setEditingSlotId] = useState(null);
       const [editingSlotDay, setEditingSlotDay] = useState(1);
       const [editingSlotTime, setEditingSlotTime] = useState('09:00');
+      const [editingEventId, setEditingEventId] = useState(null);
+      const [editEventForm, setEditEventForm] = useState({ title: '', dateStr: '', endDateStr: '', time: '', timeEnd: '', note: '' });
       const [newPatSlot, setNewPatSlot] = useState('');
       const [newPatLoc, setNewPatLoc] = useState('');
       const [newPatFreq, setNewPatFreq] = useState('weekly');
@@ -1754,6 +1757,25 @@
         setTimeSlots(timeSlots.map(sl => sl.id === editingSlotId ? { ...sl, dayOfWeek: day, time, updatedAt: Date.now() } : sl));
         setEditingSlotId(null);
         showToast(`Zeitslot geändert (${DAY_NAMES[day]} ${time} Uhr).`, 'success');
+      };
+
+      // Ereignis ändern (ID + Kategorie bleiben erhalten)
+      const handleSaveEvent = () => {
+        if (!editingEventId) return;
+        const f = editEventForm;
+        if (!f.title.trim() || !f.dateStr) { showToast('Titel und Datum sind erforderlich.', 'error'); return; }
+        setEvents(events.map(ev => ev.id === editingEventId ? {
+          ...ev,
+          title: f.title.trim(),
+          dateStr: f.dateStr,
+          endDateStr: f.endDateStr || null,
+          time: f.time || null,
+          timeEnd: f.timeEnd || null,
+          note: f.note.trim() || null,
+          updatedAt: Date.now()
+        } : ev));
+        setEditingEventId(null);
+        showToast('Ereignis aktualisiert.', 'success');
       };
 
       // Muster hinzufügen
@@ -3352,13 +3374,37 @@
             h('div', { className: 'bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4' },
               h('h2', { className: 'text-lg font-bold text-slate-800' }, 'Ereignisse'),
               events.length > 0 ? h('div', { className: 'space-y-1 max-h-64 overflow-auto' },
-                [...events].sort((a, b) => a.dateStr.localeCompare(b.dateStr)).map(ev => h('div', { key: ev.id, className: 'flex items-center justify-between text-xs bg-slate-50 rounded-lg px-3 py-2 gap-2' },
-                  h('div', { className: 'min-w-0' },
-                    h('div', { className: 'font-bold text-slate-800 truncate' }, `${ev.title}${ev.time ? ' · ' + ev.time + (ev.timeEnd ? '-' + ev.timeEnd : '') : ''}`),
-                    h('div', { className: 'text-slate-500 truncate' }, `${ev.dateStr}${ev.endDateStr ? ' – ' + ev.endDateStr : ''}${ev.note ? ' · ' + ev.note : ''}`)
-                  ),
-                  h('button', { onClick: () => { markDeleted('events', ev.id); setEvents(events.filter(x => x.id !== ev.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline shrink-0' }, 'Löschen')
-                ))
+                [...events].sort((a, b) => a.dateStr.localeCompare(b.dateStr)).map(ev => {
+                  const isEditingThis = editingEventId === ev.id;
+                  return h('div', { key: ev.id, className: 'text-xs bg-slate-50 rounded-lg px-3 py-2' },
+                    isEditingThis ? h('form', { onSubmit: (e) => { e.preventDefault(); handleSaveEvent(); }, className: 'space-y-2' },
+                      h('div', { className: 'flex items-center justify-between gap-2' },
+                        h('span', { className: 'font-bold text-slate-800' }, 'Ereignis bearbeiten'),
+                        h('div', { className: 'flex items-center gap-1' },
+                          h('button', { type: 'submit', title: 'Speichern', className: 'text-emerald-600 text-base font-bold leading-none px-1' }, '✓'),
+                          h('button', { type: 'button', onClick: () => setEditingEventId(null), title: 'Abbrechen', className: 'text-slate-400 text-base font-bold leading-none px-1' }, '✕')
+                        )
+                      ),
+                      h('div', { className: 'grid grid-cols-2 sm:grid-cols-3 gap-1.5' },
+                        h('input', { type: 'text', placeholder: 'Titel', value: editEventForm.title, onChange: (e) => setEditEventForm({ ...editEventForm, title: e.target.value }), className: 'col-span-2 sm:col-span-3 text-[11px] p-1 border rounded bg-white border-indigo-400' }),
+                        h('input', { type: 'date', value: editEventForm.dateStr, onChange: (e) => setEditEventForm({ ...editEventForm, dateStr: e.target.value }), title: 'Datum', className: 'text-[11px] p-1 border rounded bg-white border-indigo-400' }),
+                        h('input', { type: 'date', value: editEventForm.endDateStr || '', onChange: (e) => setEditEventForm({ ...editEventForm, endDateStr: e.target.value }), title: 'Enddatum (optional)', className: 'text-[11px] p-1 border rounded bg-white border-indigo-400' }),
+                        h('input', { type: 'time', value: editEventForm.time || '', onChange: (e) => setEditEventForm({ ...editEventForm, time: e.target.value }), title: 'Uhrzeit (optional)', className: 'text-[11px] p-1 border rounded bg-white border-indigo-400' }),
+                        h('input', { type: 'time', value: editEventForm.timeEnd || '', onChange: (e) => setEditEventForm({ ...editEventForm, timeEnd: e.target.value }), title: 'Endzeit (optional)', className: 'text-[11px] p-1 border rounded bg-white border-indigo-400' }),
+                        h('input', { type: 'text', placeholder: 'Notiz', value: editEventForm.note || '', onChange: (e) => setEditEventForm({ ...editEventForm, note: e.target.value }), className: 'col-span-2 sm:col-span-3 text-[11px] p-1 border rounded bg-white border-indigo-400' })
+                      )
+                    ) : h('div', { className: 'flex items-center justify-between gap-2' },
+                      h('div', { className: 'min-w-0' },
+                        h('div', { className: 'font-bold text-slate-800 truncate' }, `${ev.title}${ev.time ? ' · ' + ev.time + (ev.timeEnd ? '-' + ev.timeEnd : '') : ''}`),
+                        h('div', { className: 'text-slate-500 truncate' }, `${ev.dateStr}${ev.endDateStr ? ' – ' + ev.endDateStr : ''}${ev.note ? ' · ' + ev.note : ''}`)
+                      ),
+                      h('div', { className: 'flex items-center gap-2 shrink-0' },
+                        h('button', { onClick: () => { setEditingEventId(ev.id); setEditEventForm({ title: ev.title || '', dateStr: ev.dateStr || '', endDateStr: ev.endDateStr || '', time: ev.time || '', timeEnd: ev.timeEnd || '', note: ev.note || '' }); }, title: 'Bearbeiten', className: 'text-indigo-600 text-xs hover:text-indigo-800 px-1' }, '✏️'),
+                        h('button', { onClick: () => { markDeleted('events', ev.id); setEvents(events.filter(x => x.id !== ev.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
+                      )
+                    )
+                  );
+                })
               ) : h('p', { className: 'text-xs text-slate-500' }, 'Noch keine Ereignisse importiert. Importierte Ereignisse erscheinen wie Feiertage im Kalender und werden mitgesynct.')
             ),
 
