@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.22';
+    const APP_VERSION = '1.10.23';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -1591,6 +1591,49 @@
         showToast('Abwesenheit manuell eingetragen.', 'success');
       };
 
+      // Erkennt, ob noch anonyme Beispieldaten (Demo) vorhanden sind.
+      const hasDemoData = () =>
+        (people || []).some(isDemoPerson)
+        || (people || []).some(p => Array.isArray(p.absences) && p.absences.some(a => a && a.id === 'abs-demo-1'))
+        || (locations || []).some(isDemoLocation)
+        || (timeSlots || []).some(isDemoSlot)
+        || (patterns || []).some(isDemoPattern)
+        || (groups || []).some(isDemoGroup)
+        || (schedule || []).some(isDemoTask);
+
+      // Entfernt alle Beispieldaten aus den aktuellen Daten (mit Tombstones,
+      // damit der Sync sie auf dem anderen Gerät nicht wiederherstellt).
+      const clearDemoDataForImport = () => {
+        let removedCount = 0;
+        const wipe = (coll, arr, fn) => {
+          const kept = (arr || []).filter(x => !fn(x));
+          removedCount += (arr || []).length - kept.length;
+          (arr || []).filter(fn).forEach(x => markDeleted(coll, x.id));
+          return kept;
+        };
+        const nextPeople = wipe('people', people, isDemoPerson).map(p => {
+          const absences = (p.absences || []).filter(a => a && a.id !== 'abs-demo-1');
+          if (absences.length !== (p.absences || []).length) {
+            removedCount += (p.absences || []).length - absences.length;
+            (p.absences || []).filter(a => !a || a.id === 'abs-demo-1').forEach(a => markDeleted('absences', a.id));
+            return { ...p, absences };
+          }
+          return p;
+        });
+        const nextLocations = wipe('locations', locations, isDemoLocation);
+        const nextTimeSlots = wipe('timeSlots', timeSlots, isDemoSlot);
+        const nextPatterns = wipe('patterns', patterns, isDemoPattern);
+        const nextGroups = wipe('groups', groups, isDemoGroup);
+        const nextSchedule = wipe('schedule', schedule, isDemoTask);
+        setLocations(nextLocations);
+        setTimeSlots(nextTimeSlots);
+        setPatterns(nextPatterns);
+        setGroups(nextGroups);
+        setSchedule(nextSchedule);
+        setPeople(nextPeople);
+        return { people: nextPeople, removedCount };
+      };
+
       // PDF Import Abwesenheiten
       
       // PDF Import Abwesenheiten (Robust & fehlerfrei)
@@ -1598,6 +1641,11 @@
       const handlePdfImport = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        const demoCleanupNeeded = hasDemoData();
+        if (demoCleanupNeeded && !confirm('Beim ersten Import werden die Beispieldaten (Demo-Personen, Demo-Termine, Beispiel-Abwesenheit, Demo-Gruppen und -Muster) automatisch gelöscht, damit sich echte und Beispieldaten nicht mischen. Fortfahren?')) {
+          e.target.value = '';
+          return;
+        }
 
         const fileName = file.name.toLowerCase();
         let textLines = [];
@@ -1626,7 +1674,9 @@
             okt: '10', oct: '10', nov: '11', dez: '12', dec: '12'
           };
 
-          let currentPeople = JSON.parse(JSON.stringify(people));
+          let demoRes = null;
+          if (demoCleanupNeeded) demoRes = clearDemoDataForImport();
+          let currentPeople = JSON.parse(JSON.stringify(demoRes ? demoRes.people : people));
           let addedCount = 0;
           let addedByPerson = {};
           let currentPersonName = null;
@@ -1688,10 +1738,13 @@
           if (addedCount > 0) {
             setImportBanner({
               title: `✅ ${addedCount} neue Abwesenheiten importiert`,
-              lines: Object.keys(addedByPerson).map(name => `${name}: ${addedByPerson[name].join(', ')}`)
+              lines: [
+                ...(demoRes ? [`🧹 ${demoRes.removedCount} Beispieldaten entfernt`] : []),
+                ...Object.keys(addedByPerson).map(name => `${name}: ${addedByPerson[name].join(', ')}`)
+              ]
             });
           } else {
-            showToast('Keine neuen Abwesenheiten erkannt.', 'error');
+            showToast(demoRes ? `Keine neuen Abwesenheiten erkannt. ${demoRes.removedCount} Beispieldaten wurden gelöscht.` : 'Keine neuen Abwesenheiten erkannt.', 'error');
           }
         } catch (err) {
           console.error(err);
@@ -1703,6 +1756,11 @@
       const handleEventsImport = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        const demoCleanupNeeded = hasDemoData();
+        if (demoCleanupNeeded && !confirm('Beim ersten Import werden die Beispieldaten (Demo-Personen, Demo-Termine, Beispiel-Abwesenheit, Demo-Gruppen und -Muster) automatisch gelöscht, damit sich echte und Beispieldaten nicht mischen. Fortfahren?')) {
+          e.target.value = '';
+          return;
+        }
         try {
           let raw = '';
           const fileName = file.name.toLowerCase();
@@ -1719,10 +1777,14 @@
           const seen = new Set((events || []).map(keyOf));
           const fresh = parsed.filter(ev => !seen.has(keyOf(ev)));
           if (fresh.length === 0) { showToast('Alle Ereignisse sind bereits vorhanden.', 'error'); e.target.value = ''; return; }
+          const demoRes = demoCleanupNeeded ? clearDemoDataForImport() : null;
           setEvents([...(events || []), ...fresh]);
           setImportBanner({
             title: `✅ ${fresh.length} neue Ereignisse importiert`,
-            lines: fresh.map(ev => `${ev.title} – ${ev.dateStr}${ev.endDateStr ? ' – ' + ev.endDateStr : ''}${ev.time ? ', ' + ev.time : ''}${ev.note ? ' (' + ev.note + ')' : ''}`)
+            lines: [
+              ...(demoRes ? [`🧹 ${demoRes.removedCount} Beispieldaten entfernt`] : []),
+              ...fresh.map(ev => `${ev.title} – ${ev.dateStr}${ev.endDateStr ? ' – ' + ev.endDateStr : ''}${ev.time ? ', ' + ev.time : ''}${ev.note ? ' (' + ev.note + ')' : ''}`)
+            ]
           });
         } catch (err) {
           console.error(err);
