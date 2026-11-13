@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.11.11';
+    const APP_VERSION = '1.11.12';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -2033,14 +2033,58 @@
         reader.onload = (event) => {
           try {
             const data = JSON.parse(event.target.result);
-            if (data.locations) setLocations(data.locations);
-            if (data.timeSlots) setTimeSlots(data.timeSlots);
-            if (data.patterns) setPatterns(data.patterns);
-            if (data.groups) setGroups(data.groups);
-            if (data.people) setPeople(data.people);
-            if (data.schedule) setSchedule(data.schedule);
-            if (data.events) setEvents(data.events);
-            showToast('Backup erfolgreich importiert!', 'success');
+            const now = Date.now();
+            // Sync-Verbindlichkeit: Der Backup-Stand gilt als maßgeblich.
+            // 1. Alles, was lokal existiert, aber im Backup fehlt, bekommt eine Lösch-Markierung (Tombstone) –
+            //    so wird die Löschung auf dem anderen Gerät übernommen statt dort wiederhergestellt.
+            // 2. Alles, was im Backup liegt, wird aus den Lösch-Markierungen entfernt (Wiederherstellung).
+            const COLL_PAIRS = [
+              ['locations', locations], ['timeSlots', timeSlots], ['patterns', patterns],
+              ['groups', groups], ['people', people], ['schedule', schedule], ['events', events]
+            ];
+            const tombAdd = {};
+            COLL_PAIRS.forEach(([coll, localArr]) => {
+              if (!Array.isArray(data[coll])) return;
+              const backupIds = new Set(data[coll].map(x => (x && x.id) || null).filter(Boolean));
+              (localArr || []).forEach(x => {
+                if (x && x.id && !backupIds.has(x.id)) (tombAdd[coll] = tombAdd[coll] || {})[x.id] = now;
+              });
+            });
+            // Abwesenheiten sitzen in den Personen – ebenso vergleichen
+            const backupAbsIds = new Set(Array.isArray(data.people) ? data.people.flatMap(p => Array.isArray(p && p.absences) ? p.absences.map(a => (a && a.id) || null).filter(Boolean) : []) : []);
+            (people || []).forEach(p => (p.absences || []).forEach(a => {
+              if (a && a.id && !backupAbsIds.has(a.id)) (tombAdd.absences = tombAdd.absences || {})[a.id] = now;
+            }));
+            setTombstones(prev => {
+              const next = { ...prev };
+              Object.entries(tombAdd).forEach(([coll, ids]) => { next[coll] = { ...(next[coll] || {}), ...ids }; });
+              COLL_PAIRS.forEach(([coll]) => {
+                if (!Array.isArray(data[coll])) return;
+                const nextColl = { ...(next[coll] || {}) };
+                data[coll].forEach(x => { if (x && x.id && nextColl[x.id] !== undefined) delete nextColl[x.id]; });
+                next[coll] = nextColl;
+              });
+              if (Array.isArray(data.people)) {
+                const nextAbs = { ...(next.absences || {}) };
+                data.people.forEach(p => (p && Array.isArray(p.absences) ? p.absences : []).forEach(a => {
+                  if (a && a.id && nextAbs[a.id] !== undefined) delete nextAbs[a.id];
+                }));
+                next.absences = nextAbs;
+              }
+              return normalizeTombstones(next);
+            });
+            // 3. Importierte Einträge erhalten den aktuellen Zeitstempel, damit sie im Sync
+            //    (neuester Stand gewinnt) den älteren Stand auf dem anderen Gerät ersetzen.
+            const bump = (arr) => (Array.isArray(arr) ? arr.map(x => (x && typeof x === 'object') ? { ...x, updatedAt: now } : x) : arr);
+            if (data.locations) setLocations(bump(data.locations));
+            if (data.timeSlots) setTimeSlots(bump(data.timeSlots));
+            if (data.patterns) setPatterns(bump(data.patterns));
+            if (data.groups) setGroups(bump(data.groups));
+            if (data.people) setPeople(bump(data.people).map(p => (p && typeof p === 'object') ? { ...p, absences: (Array.isArray(p.absences) ? p.absences : []).map(a => (a && typeof a === 'object') ? { ...a, updatedAt: now } : a) } : p));
+            if (data.schedule) setSchedule(bump(data.schedule));
+            if (data.events) setEvents(bump(data.events));
+            const removedTotal = Object.values(tombAdd).reduce((acc, m) => acc + Object.keys(m).length, 0);
+            showToast('Backup erfolgreich importiert!' + (removedTotal > 0 ? ` ${removedTotal} Einträge, die im Backup nicht vorhanden sind, wurden zur Löschung vorgemerkt und werden auf dem anderen Gerät entfernt.` : ''), 'success');
           } catch (err) {
             console.error(err);
             showToast('Ungültiges Backup-Dateiformat.', 'error');
