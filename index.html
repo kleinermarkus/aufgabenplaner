@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.36';
+    const APP_VERSION = '1.10.37';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -57,6 +57,7 @@
     // „Was ist neu?“ – Änderungen der letzten Versionen; erscheinen nach einem
     // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
     const CHANGELOG = {
+      '1.10.37': ['Im Bearbeiten-Formular der Muster werden die Zusatzoptionen (Wochen-Rhythmus, monatliche Optionen) jetzt nur noch angezeigt, wenn die passende Frequenz gewählt ist.'],
       '1.10.36': ['Muster-Liste: Gruppen-Chips stehen jetzt direkt hinter der Uhrzeit in derselben Zeile.'],
       '1.10.35': ['Muster-Liste ist jetzt chronologisch sortiert (Zeitslot, dann Ort); alle chronologischen Listen und Wochentag-Auswahlen beginnen mit Montag.'],
       '1.10.34': ['Den NW-Scheduler-Import-Hinweis über dem Kalender entfernt – die Anleitung bleibt im Tutorial (Schritt 4) und im Tutorial-Dokument.'],
@@ -573,6 +574,8 @@
       const [newGroupName, setNewGroupName] = useState('');
       const [editPatGroupIds, setEditPatGroupIds] = useState([]);
       const [editPatSlotId, setEditPatSlotId] = useState('');
+      const [editPatFreq, setEditPatFreq] = useState('weekly');
+      const [editPatMonthlyMode, setEditPatMonthlyMode] = useState('dayOfMonth');
       const [newTaskGroupIds, setNewTaskGroupIds] = useState([]);
       const [editingPattern, setEditingPattern] = useState(null);
 
@@ -2878,6 +2881,8 @@
                             setEditingPattern(pat);
                             setEditPatSlotId(pat.slotId);
                             setEditPatGroupIds([...(pat.groupIds || [])]);
+                            setEditPatFreq(pat.frequency);
+                            setEditPatMonthlyMode(pat.monthlyMode || 'dayOfMonth');
                           }
                         }, className: 'text-indigo-600 font-semibold text-xs hover:underline' }, isEditingThis ? '✕ Abbrechen' : '✏️ Bearbeiten'),
                         h('button', { onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
@@ -2918,10 +2923,8 @@
                           h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Frequenz'),
                           h('select', {
                             name: 'editFreq',
-                            defaultValue: pat.frequency,
-                            onChange: (e) => {
-                              // force re-render for parity select if needed or handled by uncontrolled default
-                            },
+                            value: editPatFreq,
+                            onChange: (e) => setEditPatFreq(e.target.value),
                             className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300'
                           },
                             h('option', { value: 'weekly' }, 'Wöchentlich'),
@@ -2931,26 +2934,26 @@
                         )
                       ),
                       h('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' },
-                        h('div', null,
-                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Wochen-Rhythmus (bei 2-wöchentlich)'),
+                        editPatFreq === 'biweekly' ? h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Wochen-Rhythmus'),
                           h('select', { name: 'editParity', defaultValue: pat.weekParity || 'even', className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' },
                             h('option', { value: 'even' }, 'Nur in geraden Wochen (KW 2, 4, 6...)'),
                             h('option', { value: 'odd' }, 'Nur in ungeraden Wochen (KW 1, 3, 5...)')
                           )
-                        ),
-                        h('div', null,
-                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Monatlicher Rhythmus (bei monatlich)'),
-                          h('select', { name: 'editMonthlyMode', defaultValue: pat.monthlyMode || 'dayOfMonth', className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' },
+                        ) : null,
+                        editPatFreq === 'monthly' ? h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Monatlicher Rhythmus'),
+                          h('select', { name: 'editMonthlyMode', value: editPatMonthlyMode, onChange: (e) => setEditPatMonthlyMode(e.target.value), className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' },
                             h('option', { value: 'dayOfMonth' }, 'Am gleichen Tag des Monats'),
                             h('option', { value: 'nthWeekday' }, 'Am x. Wochentag im Monat')
                           )
-                        ),
-                        h('div', null,
-                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Tag im Monat (bei Tag des Monats)'),
+                        ) : null,
+                        editPatFreq === 'monthly' && editPatMonthlyMode === 'dayOfMonth' ? h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Tag im Monat'),
                           h('input', { name: 'editMonthlyDay', type: 'number', min: 1, max: 31, defaultValue: pat.monthlyDay || 1, className: 'w-full text-xs p-2 border rounded-lg bg-white border-slate-300' })
-                        ),
-                        h('div', null,
-                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Wiederholung im Monat (bei x. Wochentag)'),
+                        ) : null,
+                        editPatFreq === 'monthly' && editPatMonthlyMode === 'nthWeekday' ? h('div', null,
+                          h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Wiederholung im Monat'),
                           h('div', { className: 'flex gap-2' },
                             h('select', { name: 'editMonthlyWeek', defaultValue: pat.monthlyWeek || '1', className: 'w-1/2 text-xs p-2 border rounded-lg bg-white border-slate-300' },
                               h('option', { value: '1' }, '1.'), h('option', { value: '2' }, '2.'),
@@ -2961,7 +2964,7 @@
                               DAY_ORDER.map(idx => h('option', { key: idx, value: idx }, DAY_NAMES[idx]))
                             )
                           )
-                        )
+                        ) : null
                       ),
                       groups.length > 0 ? h('div', null,
                         h('label', { className: 'text-[10px] font-bold text-slate-500 block mb-1' }, 'Relevante Gruppen (optional – leer = für alle)'),
