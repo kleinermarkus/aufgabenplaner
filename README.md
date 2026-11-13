@@ -40,6 +40,7 @@ Nach einem Import erscheint über dem Kalender kurz ein **grünes Banner**, das 
 - **Gruppen verwalten**: Anlegen, Mitglieder zuordnen; Löschen entfernt die Gruppe aus allen Terminen/Mustern
 - **Bundesland** für die gesetzlichen Feiertage (16 Länder, Standard Sachsen)
 - **Ereignisse verwalten**: importierte Ereignisse mit Titel, Uhrzeit, Zeitraum und Ort einsehen und einzeln löschen – der Import erfolgt über die Schaltfläche „2. Ereignisse importieren" auf der Kalenderseite
+- **Rückgängig-Funktion**: Nach jeder Änderung erscheint für einige Sekunden ein Banner mit ablaufendem Kreis – ein Klick auf „Rückgängig" nimmt die letzte Änderung zurück (angelegte Einträge werden entfernt, gelöschte wiederhergestellt, Änderungen zurückgesetzt); die Rücknahme wird auf dem anderen Gerät mit synchronisiert
 - **Datensicherung**: Backup als JSON exportieren/importieren, **gesamte App als .html herunterladen**
 - **Gefahrenzone**: Alle Anwendungsdaten komplett löschen
 

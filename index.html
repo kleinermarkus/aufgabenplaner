@@ -22,6 +22,9 @@
   <script src="peerjs-1.5.4.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR"></script>
   <script src="qrcode-1.0.0.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU"></script>
   <style>
+    /* Undo-Banner: ablaufender Kreis (Dauer = UNDO_DURATION in der App) */
+    @keyframes undoRingShrink { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 50.27; } }
+    .undo-ring { animation: undoRingShrink 7s linear forwards; }
     /* Größere Schrift auf großen Monitoren (rem-basierte Größen skalieren mit) */
     @media screen and (min-width: 1280px) { html { font-size: 17px; } }
     @media screen and (min-width: 1536px) { html { font-size: 18.5px; } }
@@ -40,7 +43,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.37';
+    const APP_VERSION = '1.10.38';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -57,6 +60,7 @@
     // „Was ist neu?“ – Änderungen der letzten Versionen; erscheinen nach einem
     // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
     const CHANGELOG = {
+      '1.10.38': ['Neu: Rückgängig-Funktion \u2013 nach jeder Änderung erscheint für einige Sekunden ein Banner mit ablaufendem Kreis, über das sich die letzte Änderung zurücknehmen lässt (wird auch auf dem anderen Gerät rückgängig gemacht).'],
       '1.10.37': ['Im Bearbeiten-Formular der Muster werden die Zusatzoptionen (Wochen-Rhythmus, monatliche Optionen) jetzt nur noch angezeigt, wenn die passende Frequenz gewählt ist.'],
       '1.10.36': ['Muster-Liste: Gruppen-Chips stehen jetzt direkt hinter der Uhrzeit in derselben Zeile.'],
       '1.10.35': ['Muster-Liste ist jetzt chronologisch sortiert (Zeitslot, dann Ort); alle chronologischen Listen und Wochentag-Auswahlen beginnen mit Montag.'],
@@ -650,6 +654,123 @@
       useEffect(() => localStorage.setItem('app_tombstones', JSON.stringify(tombstones)), [tombstones]);
       useEffect(() => localStorage.setItem('app_events', JSON.stringify(events)), [events]);
 
+      // ---------- Rückgängig-Funktion (Undo) ----------
+      // Jede Datenänderung wird erkannt (Vergleich des Gesamt-Datenstands). Für einige Sekunden
+      // bietet ein Banner an, die letzte Änderung zurückzunehmen – die Rücknahme wird wie eine
+      // normale Änderung synchronisiert (LWW über updatedAt, Tombstones für erneute Löschungen).
+      const UNDO_DURATION = 7000;
+      const [undoState, setUndoState] = useState(null); // { label, snap, key }
+      const undoLastSnapRef = useRef(null);
+      const undoSuppressRef = useRef(false);
+      const undoSuppressTimerRef = useRef(null);
+      const undoCaptureTimerRef = useRef(null);
+      const undoPendingRef = useRef(null);
+      const undoCurSnapRef = useRef(null);
+      const UNDO_COLLS = [
+        ['locations', 'Ort', 'Orte'], ['timeSlots', 'Zeitslot', 'Zeitslots'], ['patterns', 'Muster', 'Muster'],
+        ['groups', 'Gruppe', 'Gruppen'], ['people', 'Person', 'Personen'], ['schedule', 'Termin', 'Termine'], ['events', 'Ereignis', 'Ereignisse']
+      ];
+      const undoDiffLabel = (prev, cur) => {
+        const parts = [];
+        UNDO_COLLS.forEach(([coll, sing, plur]) => {
+          const a = Array.isArray(prev[coll]) ? prev[coll] : [];
+          const b = Array.isArray(cur[coll]) ? cur[coll] : [];
+          const aIds = new Set(a.filter(x => x && x.id).map(x => x.id));
+          const bIds = new Set(b.filter(x => x && x.id).map(x => x.id));
+          const aById = new Map(a.filter(x => x && x.id).map(x => [x.id, x]));
+          const added = b.filter(x => x && x.id && !aIds.has(x.id)).length;
+          const removed = a.filter(x => x && x.id && !bIds.has(x.id)).length;
+          const changed = b.filter(x => x && x.id && aIds.has(x.id) && stableStringify(x) !== stableStringify(aById.get(x.id))).length;
+          if (added) parts.push(added === 1 ? `1 ${sing} angelegt` : `${added} ${plur} angelegt`);
+          if (removed) parts.push(removed === 1 ? `1 ${sing} gelöscht` : `${removed} ${plur} gelöscht`);
+          if (changed) parts.push(changed === 1 ? `1 ${sing} geändert` : `${changed} ${plur} geändert`);
+        });
+        if (stableStringify(prev.settings || {}) !== stableStringify(cur.settings || {})) parts.push('Einstellungen geändert');
+        if ((prev.bundesland || '') !== (cur.bundesland || '')) parts.push('Bundesland geändert');
+        return parts.slice(0, 3).join(', ') || 'Letzte Änderung';
+      };
+      // Baut aus einem früheren Datenstand den Wiederherstellungszustand:
+      // - Einträge, die die Aktion gelöscht/geändert hat, kommen mit neuer updatedAt zurück (gewinnt LWW im Sync)
+      // - Von der Aktion neu angelegte Einträge werden entfernt und per Tombstone auf dem anderen Gerät gelöscht
+      const computeUndoMerge = (snap, cur) => {
+        const now = Date.now();
+        const nextTombstones = normalizeTombstones(cur.tombstones);
+        const out = { tombstones: nextTombstones };
+        UNDO_COLLS.forEach(([coll]) => {
+          const prevArr = Array.isArray(snap[coll]) ? snap[coll].filter(x => x && x.id) : [];
+          const curArr = Array.isArray(cur[coll]) ? cur[coll] : [];
+          const prevById = new Map(prevArr.map(x => [x.id, x]));
+          const result = [];
+          prevArr.forEach(item => {
+            const curItem = curArr.find(x => x && x.id === item.id);
+            if (!curItem) {
+              result.push({ ...item, updatedAt: now });
+              delete nextTombstones[coll][item.id];
+              if (coll === 'people') (item.absences || []).forEach(a => { if (a && a.id) delete nextTombstones.absences[a.id]; });
+            } else {
+              result.push(stableStringify(curItem) === stableStringify(item) ? curItem : { ...item, updatedAt: now });
+            }
+          });
+          curArr.forEach(item => {
+            if (item && item.id && !prevById.has(item.id)) {
+              nextTombstones[coll][item.id] = now;
+              if (coll === 'people') (item.absences || []).forEach(a => { if (a && a.id) nextTombstones.absences[a.id] = now; });
+            }
+          });
+          out[coll] = coll === 'people' ? result.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de')) : result;
+        });
+        out.settings = snap.settings && typeof snap.settings === 'object' ? { ...snap.settings, updatedAt: now } : cur.settings;
+        out.bundesland = snap.bundesland !== undefined ? snap.bundesland : cur.bundesland;
+        return out;
+      };
+      const performUndo = () => {
+        const snap = undoState && undoState.snap;
+        if (!snap) return;
+        setUndoState(null);
+        // Eigene Wiederherstellung nicht erneut als Aktion erfassen
+        undoSuppressRef.current = true;
+        clearTimeout(undoSuppressTimerRef.current);
+        undoSuppressTimerRef.current = setTimeout(() => { undoSuppressRef.current = false; }, 200);
+        const merged = computeUndoMerge(snap, { locations, timeSlots, patterns, groups, people, schedule, events, settings, bundesland, tombstones });
+        setLocations(merged.locations); setTimeSlots(merged.timeSlots); setPatterns(merged.patterns);
+        setGroups(merged.groups); setPeople(merged.people); setSchedule(merged.schedule); setEvents(merged.events);
+        setSettings(merged.settings);
+        if (merged.bundesland !== bundesland) setBundesland(merged.bundesland);
+        setTombstones(merged.tombstones);
+        showToast('Änderung rückgängig gemacht', 'info');
+      };
+      // Erkennt jede Datenänderung und bietet sie einige Sekunden zum Rückgängig-Machen an
+      useEffect(() => {
+        const curSnap = { locations, timeSlots, patterns, groups, people, schedule, events, settings, bundesland, tombstones };
+        const sig = stableStringify(curSnap);
+        undoCurSnapRef.current = curSnap;
+        if (undoLastSnapRef.current === null) { undoLastSnapRef.current = sig; return; }
+        if (sig === undoLastSnapRef.current) return;
+        if (undoSuppressRef.current) {
+          undoLastSnapRef.current = sig;
+          undoPendingRef.current = null;
+          clearTimeout(undoCaptureTimerRef.current);
+          clearTimeout(undoSuppressTimerRef.current);
+          undoSuppressTimerRef.current = setTimeout(() => { undoSuppressRef.current = false; }, 200);
+          return;
+        }
+        if (!undoPendingRef.current) undoPendingRef.current = JSON.parse(undoLastSnapRef.current);
+        undoLastSnapRef.current = sig;
+        clearTimeout(undoCaptureTimerRef.current);
+        undoCaptureTimerRef.current = setTimeout(() => {
+          const prevSnap = undoPendingRef.current;
+          undoPendingRef.current = null;
+          if (!prevSnap) return;
+          setUndoState({ label: undoDiffLabel(prevSnap, undoCurSnapRef.current), snap: prevSnap, key: Date.now() });
+        }, 400);
+      }, [locations, timeSlots, patterns, groups, people, schedule, events, settings, bundesland, tombstones]);
+      // Undo-Banner verschwindet nach UNDO_DURATION automatisch
+      useEffect(() => {
+        if (!undoState) return;
+        const t = setTimeout(() => setUndoState(null), UNDO_DURATION);
+        return () => clearTimeout(t);
+      }, [undoState && undoState.key]);
+
       // PWA: Service Worker registrieren und periodisch nach einer neuen Server-Version prüfen
       useEffect(() => {
         if (!location.protocol.startsWith('http')) return;
@@ -762,6 +883,8 @@
       };
 
       const applySyncData = (data) => {
+        // Änderungen, die vom anderen Gerät kommen, nicht als Undo-Aktion erfassen
+        undoSuppressRef.current = true;
         if (!data || typeof data !== 'object') return;
         suppressSendRef.current = true;
         const { cleaned: incoming, removed: incomingDemoRemoved } = stripDemoData(data);
@@ -2218,6 +2341,17 @@
               )
             )
           )
+        ) : null,
+        undoState ? h('div', { key: undoState.key, className: 'fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-900 text-white pl-4 pr-2 py-2 rounded-full shadow-2xl no-print' },
+          h('span', { className: 'text-xs' }, `\u21a9\ufe0f ${undoState.label}`),
+          h('button', { onClick: performUndo, className: 'flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-400 text-white text-xs font-bold px-3 py-1.5 rounded-full transition-colors' },
+            h('svg', { className: 'w-4 h-4', viewBox: '0 0 20 20', 'aria-hidden': 'true' },
+              h('circle', { cx: 10, cy: 10, r: 8, fill: 'none', stroke: 'rgba(255,255,255,0.3)', strokeWidth: 2 }),
+              h('circle', { cx: 10, cy: 10, r: 8, fill: 'none', stroke: '#ffffff', strokeWidth: 2, strokeLinecap: 'round', strokeDasharray: '50.27', className: 'undo-ring' })
+            ),
+            'Rückgängig'
+          ),
+          h('button', { onClick: () => setUndoState(null), 'aria-label': 'Schließen', className: 'text-slate-400 hover:text-white text-sm font-bold px-1.5' }, '\u2715')
         ) : null,
         toast ? h('div', { className: `fixed bottom-4 right-4 z-50 px-4 py-2.5 rounded-lg shadow-lg text-white font-medium text-sm ${toast.type === 'error' ? 'bg-rose-600' : 'bg-emerald-600'}` }, toast.msg) : null,
 
