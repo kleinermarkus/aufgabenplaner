@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.35';
+    const APP_VERSION = '1.10.36';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -57,6 +57,7 @@
     // „Was ist neu?“ – Änderungen der letzten Versionen; erscheinen nach einem
     // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
     const CHANGELOG = {
+      '1.10.36': ['Muster-Liste: Gruppen-Chips stehen jetzt direkt hinter der Uhrzeit in derselben Zeile.'],
       '1.10.35': ['Muster-Liste ist jetzt chronologisch sortiert (Zeitslot, dann Ort); alle chronologischen Listen und Wochentag-Auswahlen beginnen mit Montag.'],
       '1.10.34': ['Den NW-Scheduler-Import-Hinweis über dem Kalender entfernt – die Anleitung bleibt im Tutorial (Schritt 4) und im Tutorial-Dokument.'],
       '1.10.33': ['Kopfzeile aufgeräumt: Der Untertitel unter dem Titel wurde entfernt.'],
@@ -2863,10 +2864,11 @@
                   const isEditingThis = editingPattern?.id === pat.id;
 
                   return h('div', { key: pat.id, className: 'p-3 border rounded-lg bg-slate-50 space-y-2 text-sm' },
-                    h('div', { className: 'flex justify-between items-center' },
-                      h('div', null,
+                    h('div', { className: 'flex justify-between items-center flex-wrap gap-2' },
+                      h('div', { className: 'flex items-center flex-wrap gap-x-1 gap-y-1 min-w-0' },
                         h('span', { className: 'font-bold text-slate-800' }, loc?.name || 'Unbekannter Ort'),
-                        ` – ${DAY_NAMES[slot?.dayOfWeek] || ''} ${slot?.time} Uhr (${freqText})`
+                        ` – ${DAY_NAMES[slot?.dayOfWeek] || ''} ${slot?.time} Uhr (${freqText})`,
+                        patGroups.length > 0 ? patGroups.map(gn => h('span', { key: gn, className: 'px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-semibold' }, gn)) : null
                       ),
                       h('div', { className: 'flex items-center gap-3' },
                         h('button', { onClick: () => {
@@ -2881,9 +2883,6 @@
                         h('button', { onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, className: 'text-rose-500 font-bold text-xs hover:underline' }, 'Löschen')
                       )
                     ),
-                    patGroups.length > 0 ? h('div', { className: 'flex flex-wrap gap-1' },
-                      patGroups.map(gn => h('span', { key: gn, className: 'px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-semibold' }, gn))
-                    ) : null,
                     isEditingThis ? h('form', {
                       onSubmit: (e) => {
                         e.preventDefault();
