@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.11.6';
+    const APP_VERSION = '1.11.7';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -515,6 +515,21 @@
       return { cleaned, removed };
     };
 
+    // Interaktives Tutorial: geführte Einführung, wechselt automatisch in den passenden Tab
+    const TUTORIAL_STEPS = [
+      { tab: 'calendar', title: 'Willkommen beim Monatsplaner! 📅', text: ['Dieser Planer verteilt Aufgaben automatisch gerecht – unter Berücksichtigung von Abwesenheiten, Qualifikationen und externen Schichten.', 'Alle Daten bleiben in Ihrem Browser; es gibt keinen Server, der sie kennt.', 'Diese Einführung können Sie jederzeit über den ❓-Button in der Kopfzeile erneut öffnen.'] },
+      { tab: 'calendar', title: 'Beispieldaten 🧹', text: ['Damit Sie alles gefahrlos ausprobieren können, enthält die frisch installierte App anonyme Beispieldaten.', 'Sie verschwinden automatisch beim ersten Import von Abwesenheiten oder Ereignissen (ein Pop-up fragt vorher nach) – oder einzeln per Löschen bzw. über die Gefahrenzone in den Stammdaten.'] },
+      { tab: 'calendar', title: 'Planer & Kalender 🗓️', text: ['Der Monatskalender zeigt alle Termine mit farbigen Namens-Chips (mobil als Akronym).', 'Tippen Sie auf einen Tag: rechts öffnet sich das Aufgaben-Panel mit „+ Aufgabe anlegen“, der klickbaren ⭐ Empfehlung und der Verfügbarkeits-Liste mit Gründen (z. B. „Schicht: Früh“ oder „Abwesend/Urlaub“).', 'Die 6 nummerierten Schaltflächen über dem Kalender sind Ihr Monatsrhythmus: erst Importe, dann Termine generieren, dann Personen zuteilen.'] },
+      { tab: 'people', title: 'Personen & Qualifikationen 👥', text: ['Legen Sie hier alle Personen an – jede erhält automatisch eine eigene Farbe.', 'In der Qualifikations-Matrix klicken Sie an, wer welchen Zeitslot an welchem Ort übernehmen kann. Nur qualifizierte Personen werden vorgeschlagen.', 'Abwesenheiten tragen Sie pro Person ein – oder importieren sie als PDF/DOCX (Schritt 1 über dem Kalender).'] },
+      { tab: 'people', title: 'Schichtrhythmus 🔄', text: ['Wer extern im 3-Schicht-System arbeitet, wird automatisch gesperrt, solange eine Schicht läuft.', 'Schichtrhythmus aktivieren, Startdatum angeben und die Reihenfolge anklicken (Kachel: Frei → Früh → Spät → Nacht). Das Muster läuft unbegrenzt weiter.', 'Blockierungen: Früh 06–14 Uhr · Spät 14–22 Uhr · Nacht 22–06 Uhr und am Folgetag bis 14 Uhr.'] },
+      { tab: 'patterns', title: 'Wiederkehrende Muster 🔁', text: ['Hier legen Sie fest, welche Termine regelmäßig entstehen: wöchentlich, alle 2 Wochen (Kalenderwochen-Parität) oder monatlich.', 'Monatlich geht beides: fester Tag des Monats (z. B. der 15.) oder „x. Wochentag im Monat“ (z. B. 1. Dienstag).', 'Optional: Termine für eine oder mehrere Gruppen relevant machen – Gruppentermine laufen „außer Konkurrenz“ und bekommen nie automatisch eine Person.'] },
+      { tab: 'stats', title: 'Statistik 📊', text: ['Hier sehen Sie pro Person, wie oft sie eingeteilt wurde – so prüfen Sie, ob die Verteilung ausgeglichen ist.', 'Die automatische Zuteilung bevorzugt die längste Pause, dann die geringste Gesamtzahl, dann Wochentags-Balance.'] },
+      { tab: 'settings', title: 'Stammdaten & Export ⚙️', text: ['Orte, Zeitslots und Gruppen verwalten, das Bundesland für die Feiertage wählen.', 'Dazu: Backup exportieren/importieren (regelmäßig sichern!) und die Gefahrenzone zum kompletten Zurücksetzen.'] },
+      { tab: 'calendar', title: 'Zwei Geräte koppeln 🔄', text: ['Der 🔄 Sync-Button in der Kopfzeile verbindet zwei Geräte direkt (ohne Server).', 'Einfach Code erzeugen und per QR-Scan oder Schlüssel-Textfeld auf dem zweiten Gerät verbinden – danach synchronisiert alles automatisch in beide Richtungen, dauerhaft.', 'Im Sync-Dialog führt ein Protokoll Buch, was übertragen wurde.'] },
+      { tab: 'calendar', title: 'Als App installieren 📲', text: ['Die App ist als PWA installierbar und läuft danach auch offline (Android: Menü → „App installieren“ · iPhone: Teilen → „Zum Home-Bildschirm“).', 'Erscheint eine neue Version, meldet das gelbe Update-Banner oben – „Jetzt aktualisieren“ lädt sie.', 'Die Versionsnummer steht klein neben dem Sync-Button.'] },
+      { tab: 'calendar', title: 'Los geht’s! ✅', text: ['Viel Erfolg beim Planen!', 'Diese Einführung können Sie jederzeit über den ❓-Button in der Kopfzeile erneut öffnen – Details stehen auch im Tutorial-Dokument und in der README.'] }
+    ];
+
     function App() {
       const [currentDate, setCurrentDate] = useState(new Date());
       const [activeTab, setActiveTab] = useState('calendar');
@@ -647,6 +662,19 @@
         const t = setTimeout(() => setImportBanner(null), 12000);
         return () => clearTimeout(t);
       }, [importBanner]);
+
+      // ---------- Interaktives Tutorial ----------
+      const [tutorialOpen, setTutorialOpen] = useState(() => !localStorage.getItem('app_tutorial_done'));
+      const [tutorialStep, setTutorialStep] = useState(0);
+      useEffect(() => {
+        if (!tutorialOpen) return;
+        const step = TUTORIAL_STEPS[tutorialStep];
+        if (step && step.tab && step.tab !== activeTab) setActiveTab(step.tab);
+      }, [tutorialStep, tutorialOpen]);
+      const closeTutorial = () => {
+        setTutorialOpen(false);
+        localStorage.setItem('app_tutorial_done', '1');
+      };
 
       // ---------- Lokaler KI-Erklär-Assistent: Zustand ----------
       const [assistantOpen, setAssistantOpen] = useState(false);
@@ -2061,7 +2089,12 @@
                 onClick: () => setSyncOpen(true),
                 title: syncConnected ? 'Geräte-Sync aktiv' : syncPending ? 'Geräte-Sync verbindet…' : 'Geräte-Sync öffnen',
                 className: `px-2 py-0.5 text-[11px] font-bold rounded-lg flex items-center gap-1 ${syncConnected ? 'bg-emerald-600 hover:bg-emerald-700' : syncPending ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-800 hover:bg-slate-900'}`
-              }, (syncConnected ? '🟢' : syncPending ? '🟡' : '🔄') + ' Sync')
+              }, (syncConnected ? '🟢' : syncPending ? '🟡' : '🔄') + ' Sync'),
+              h('button', {
+                onClick: () => { setTutorialStep(0); setTutorialOpen(true); },
+                title: 'Tutorial öffnen',
+                className: 'px-2 py-0.5 text-[11px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600'
+              }, '❓')
             )),
             h('p', { className: 'text-xs text-slate-500' }, 'Automatische gerechte Aufgabenverteilung & Feiertagsunterstützung')
           ),
@@ -2149,6 +2182,30 @@
           )
         ) : null,
 
+        tutorialOpen ? h('div', { className: 'fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center p-3 sm:p-4 no-print', onClick: closeTutorial },
+          h('div', { className: 'bg-white rounded-2xl shadow-2xl max-w-md w-full p-5', onClick: (e) => e.stopPropagation() },
+            h('div', { className: 'flex items-start justify-between gap-3 mb-2' },
+              h('div', null,
+                h('p', { className: 'text-[10px] font-bold text-indigo-500 uppercase tracking-wide' }, `Tutorial · Schritt ${tutorialStep + 1} von ${TUTORIAL_STEPS.length}`),
+                h('h2', { className: 'text-lg font-bold text-slate-900' }, TUTORIAL_STEPS[tutorialStep].title)
+              ),
+              h('button', { onClick: closeTutorial, className: 'text-slate-400 hover:text-slate-600 text-xl font-bold shrink-0', title: 'Tutorial schließen' }, '✕')
+            ),
+            h('div', { className: 'space-y-2 mb-4' },
+              TUTORIAL_STEPS[tutorialStep].text.map((t, i) => h('p', { key: i, className: 'text-sm text-slate-700 leading-relaxed' }, t))
+            ),
+            h('div', { className: 'flex gap-1.5 mb-4' },
+              TUTORIAL_STEPS.map((_, i) => h('div', { key: i, className: `h-1.5 flex-1 rounded-full ${i <= tutorialStep ? 'bg-indigo-500' : 'bg-slate-200'}` }))
+            ),
+            h('div', { className: 'flex items-center justify-between gap-2' },
+              h('button', { onClick: closeTutorial, className: 'text-xs text-slate-400 hover:text-slate-600 font-semibold' }, 'Überspringen'),
+              h('div', { className: 'flex gap-2' },
+                tutorialStep > 0 ? h('button', { onClick: () => setTutorialStep(s => s - 1), className: 'px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold' }, 'Zurück') : null,
+                h('button', { onClick: () => { if (tutorialStep + 1 >= TUTORIAL_STEPS.length) closeTutorial(); else setTutorialStep(s => s + 1); }, className: 'px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold' }, tutorialStep + 1 >= TUTORIAL_STEPS.length ? 'Fertig' : 'Weiter')
+              )
+            )
+          )
+        ) : null,
         assistantOpen ? h('div', { className: 'fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4 no-print', onClick: () => setAssistantOpen(false) },
           h('div', { className: 'bg-white rounded-xl shadow-xl max-w-lg w-full p-4 sm:p-6 space-y-3', onClick: (e) => e.stopPropagation() },
             h('div', { className: 'flex justify-between items-center' },
