@@ -10,8 +10,8 @@ Eigenständige Single-File-Web-App (`index.html`) zur gerechten Aufgabenverteilu
 - **Monatskalender** mit Feiertagen (Bundesland einstellbar), farbigen Namens-Chips (mobil als Akronym) und mitwachsenden Zellen bei mehreren Terminen pro Tag; Gruppentermine zeigen links einen Ein-Buchstaben-Chip je Gruppe (unterscheidendes Wort, z. B. „Gruppe Nord“ → „N“); ohne Zuteilung steht dort der Gruppenname bzw. bei mehreren Gruppen „Gruppen“ (mobil Kürzel); auf dem Handy zeigen Gruppentermine nur die Gruppen-Buchstaben-Chips statt eines Namens; Gruppentermine erscheinen blau – bei mehreren Gruppen dunkelblau; unbesetzte allgemeine Termine rot
 - **Tag antippen** → Aufgaben-Panel rechts: „+ Aufgabe anlegen", Zeitslot/Ort ändern, **Gruppen-Chips direkt am Termin umschalten**, ⭐ **Empfehlung** anklickbar, Verfügbarkeits-Liste mit Klick-Zuteilung und **Grundangaben** bei Sperren (Abwesend, Schicht, Qualifikation, Gruppe)
 - **📅 Datum ändern** – jeden geplanten Termin direkt im Panel verschieben (Datumsfeld am Termin); der Kalender springt zum neuen Tag, Kollisionen zur gleichen Zeit werden abgefangen. Bei Wechsel des Wochentags fragt ein Banner, ob ein vorhandener Zeitslot des neuen Wochentags genutzt (mit Anzahl qualifizierter Personen) oder ein neuer Zeitslot angelegt werden soll – so bleiben die Qualifikationsprüfungen korrekt; ist die aktuell zugeteilte Person für den neuen Zeitslot nicht qualifiziert, gibt es einen Warnhinweis
-- **1. Abwesenheiten importieren** – Abwesenheiten aus PDF/DOCX einlesen
-- **2. Ereignisse importieren** – zusätzliche Termine (z. B. Versammlungsereignisse) aus DOCX/TXT einlesen
+- **1. Abwesenheiten importieren** – Abwesenheiten aus PDF/DOCX einlesen (vorgesehen für den Export „Person Abwesenheiten" aus dem NW Scheduler: Bericht → Personen; Screenshots im TUTORIAL.md, Kapitel 7)
+- **2. Ereignisse importieren** – zusätzliche Termine (z. B. Versammlungsereignisse) aus DOCX/TXT einlesen (vorgesehen für den Export „Versammlungsereignisse" aus dem NW Scheduler: Bericht → Versammlung, mit Zeitraum)
 - **3. Termine generieren** – legt alle wiederkehrenden Termine des Monats an (inkl. Gruppentermine), mit Duplikatschutz auch über Monatswechsel hinweg
 - **4. Personen zuteilen** – faire automatische Verteilung (Gruppentermine ausgenommen)
 - **5. Zuteilungen löschen** – alle Zuteilungen des Monats freigeben, dann neu verteilen
@@ -82,7 +82,8 @@ Im Tab **⚙️ Stammdaten & Export** lassen sich **Gruppen** anlegen (z. B. Tea
 
 - Wiederkehrende Gruppen-Termine werden beim **Termine generieren** automatisch angelegt – auch parallel zu einem normalen Termin zur gleichen Zeit –, bekommen aber **keine automatische Zuteilung** (manuelle Vergabe).
 - **Gruppen sind nachträglich änderbar**: Im Aufgaben-Panel „✏️ Ändern“ lässt sich die Gruppen-Relevanz jedes Termins jederzeit anpassen.
-- Zuteilungen auf Gruppen-Terminen laufen **außer Konkurrenz**: Sie haben keinen Einfluss auf die Fairness-Verteilung anderer Termine oder auf die manuelle Empfehlung.
+- Zuteilungen auf Gruppen-Terminen laufen **standardmäßig außer Konkurrenz**: Sie haben keinen Einfluss auf die Fairness-Verteilung anderer Termine oder auf die manuelle Empfehlung und werden nicht automatisch zugeteilt.
+- In den Stammdaten (Karte **„Gruppen-Termine: Verteilung"**) lässt sich beides umstellen: ob Zuteilungen für Gruppentermine **automatisch** erfolgen sollen und ob diese Termine in die Empfehlung/automatische Verteilungsstatistik **einfließen** oder außer Konkurrenz bleiben. Die Einstellungen werden über die Geräte-Synchronisierung mit übertragen.
 - Muster- und Gruppen-Änderungen werden per **Last-Update-wins** synchronisiert und setzen sich damit zuverlässig auf dem anderen Gerät durch.
 - - Gruppen-Termine erhalten beim Generieren eine **eigene ID mit Gruppen-Scope** – ein Gruppentermin kann dadurch nicht mehr versehentlich mit einem Normaltermin gleichen Zeitslots/Ortes verschmolzen oder beim Dedupe verworfen werden.
 - Bei der **automatischen Zuteilung** werden Aufgaben mit Gruppen nur an Mitglieder dieser Gruppen vergeben.

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aufgabenplaner-v4';
+const CACHE_NAME = 'aufgabenplaner-v5';
 
 const PRECACHE = [
   './',
@@ -14,7 +14,9 @@ const PRECACHE = [
   './pdf-2.16.105.min.js',
   './pdf.worker-2.16.105.min.js',
   './peerjs-1.5.4.min.js',
-  './qrcode-1.0.0.min.js'
+  './qrcode-1.0.0.min.js',
+  './docs/nw-scheduler-export-abwesenheiten.png',
+  './docs/nw-scheduler-export-ereignisse.png'
 ];
 
 self.addEventListener('install', (event) => {
