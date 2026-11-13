@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aufgabenplaner-v6';
+const CACHE_NAME = 'aufgabenplaner-v7';
 
 const PRECACHE = [
   './',
@@ -31,7 +31,8 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)));
+      // Modell-Caches des KI-Assistenten (WebLLM) bleiben erhalten
+      await Promise.all(keys.filter((key) => key !== CACHE_NAME && !key.startsWith('webllm/') && !key.startsWith('tvmjs')).map((key) => caches.delete(key)));
       await self.clients.claim();
     })()
   );
