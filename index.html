@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.30';
+    const APP_VERSION = '1.10.31';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -57,6 +57,7 @@
     // „Was ist neu?“ – Änderungen der letzten Versionen; erscheinen nach einem
     // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
     const CHANGELOG = {
+      '1.10.31': ['Beim Öffnen der App ist jetzt automatisch der heutige Tag angewählt.'],
       '1.10.30': ['Nach einer Aktualisierung zeigt die App jetzt einmalig ein Banner mit den Änderungen der neuen Version.'],
       '1.10.29': ['Neu in den Stammdaten: Karte „Orte & Zeitslots verknüpfen“ – festlegen, welche Orte zu welchem Zeitslot passen.', 'Personen-Matrix und Termin-/Muster-Bearbeitung zeigen nur noch freigegebene Ort-Zeitslot-Kombinationen.'],
       '1.10.28': ['Backup-Import synchronisiert Löschungen zuverlässig auf das andere Gerät (auch Termine, die im Backup fehlen, werden entfernt).'],
@@ -515,7 +516,7 @@
     const TUTORIAL_STEPS = [
       { tab: 'calendar', title: 'Willkommen beim Monatsplaner! 📅', text: ['Dieser Planer verteilt Aufgaben automatisch gerecht – unter Berücksichtigung von Abwesenheiten, Qualifikationen und externen Schichten.', 'Alle Daten bleiben in Ihrem Browser; es gibt keinen Server, der sie kennt.', 'Diese Einführung können Sie jederzeit über den ❓-Button in der Kopfzeile erneut öffnen.'] },
       { tab: 'calendar', title: 'Beispieldaten 🧹', text: ['Damit Sie alles gefahrlos ausprobieren können, enthält die frisch installierte App anonyme Beispieldaten.', 'Sie verschwinden automatisch beim ersten Import von Abwesenheiten oder Ereignissen (ein Pop-up fragt vorher nach) – oder einzeln per Löschen bzw. über die Gefahrenzone in den Stammdaten.'] },
-      { tab: 'calendar', title: 'Planer & Kalender 🗓️', text: ['Der Monatskalender zeigt alle Termine mit farbigen Namens-Chips (mobil als Akronym).', 'Tippen Sie auf einen Tag: rechts öffnet sich das Aufgaben-Panel mit „+ Aufgabe anlegen“, der klickbaren ⭐ Empfehlung und der Verfügbarkeits-Liste mit Gründen (z. B. „Schicht: Früh“ oder „Abwesend/Urlaub“).', 'Die 6 nummerierten Schaltflächen über dem Kalender sind Ihr Monatsrhythmus: erst Importe, dann Termine generieren, dann Personen zuteilen.'] },
+      { tab: 'calendar', title: 'Planer & Kalender 🗓️', text: ['Der Monatskalender zeigt alle Termine mit farbigen Namens-Chips (mobil als Akronym). Beim Öffnen der App ist der heutige Tag bereits angewählt.', 'Tippen Sie auf einen Tag: rechts öffnet sich das Aufgaben-Panel mit „+ Aufgabe anlegen“, der klickbaren ⭐ Empfehlung und der Verfügbarkeits-Liste mit Gründen (z. B. „Schicht: Früh“ oder „Abwesend/Urlaub“).', 'Die 6 nummerierten Schaltflächen über dem Kalender sind Ihr Monatsrhythmus: erst Importe, dann Termine generieren, dann Personen zuteilen.'] },
       { tab: 'calendar', title: 'Import aus NW Scheduler 📥', text: ['Die Schaltflächen „1. Abwesenheiten importieren“ und „2. Ereignisse importieren“ sind für den Export aus dem NW Scheduler vorgesehen.', 'Abwesenheiten: NW Scheduler → Berichte → Personen → „Person Abwesenheiten“ → als Dokument (PDF/DOCX) speichern und hier importieren.', 'Ereignisse: Berichte → Versammlung → „Versammlungsereignisse“ mit gewünschtem Zeitraum → als Dokument (DOCX/TXT) speichern und hier importieren.'], images: [{ src: './docs/nw-scheduler-export-abwesenheiten.png', caption: 'NW Scheduler 8.2: Export „Person Abwesenheiten“ (Bericht → Personen)' }, { src: './docs/nw-scheduler-export-ereignisse.png', caption: 'NW Scheduler 8.2: Export „Versammlungsereignisse“ (Bericht → Versammlung, mit Zeitraum)' }] },
       { tab: 'people', title: 'Personen & Qualifikationen 👥', text: ['Legen Sie hier alle Personen an – jede erhält automatisch eine eigene Farbe.', 'In der Qualifikations-Matrix klicken Sie an, wer welchen Zeitslot an welchem Ort übernehmen kann. Nur qualifizierte Personen werden vorgeschlagen.', 'In den Stammdaten legen Sie unter „Orte & Zeitslots verknüpfen“ fest, welche Ort-Zeitslot-Kombinationen überhaupt zulässig sind – die Matrix zeigt nur diese an.', 'Abwesenheiten tragen Sie pro Person ein – oder importieren sie als PDF/DOCX (Schritt 1 über dem Kalender).'] },
       { tab: 'people', title: 'Schichtrhythmus 🔄', text: ['Wer extern im 3-Schicht-System arbeitet, wird automatisch gesperrt, solange eine Schicht läuft.', 'Schichtrhythmus aktivieren, Startdatum angeben und die Reihenfolge anklicken (Kachel: Frei → Früh → Spät → Nacht). Das Muster läuft unbegrenzt weiter.', 'Blockierungen: Früh 06–14 Uhr · Spät 14–22 Uhr · Nacht 22–06 Uhr und am Folgetag bis 14 Uhr.'] },
@@ -537,7 +538,7 @@
       const [people, setPeople] = useState(() => (JSON.parse(localStorage.getItem('app_people')) || INITIAL_PEOPLE).sort((a, b) => a.name.localeCompare(b.name, 'de')));
       const [schedule, setSchedule] = useState(() => JSON.parse(localStorage.getItem('app_sched')) || INITIAL_SCHEDULE);
 
-      const [selectedDateStr, setSelectedDateStr] = useState('2026-11-04');
+      const [selectedDateStr, setSelectedDateStr] = useState(() => toLocalDateStr(new Date())); // beim Öffnen den heutigen Tag anwählen
       const [editingTask, setEditingTask] = useState(null);
       const [editFormSlotId, setEditFormSlotId] = useState('');
       const [moveDialog, setMoveDialog] = useState(null);
