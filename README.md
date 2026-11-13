@@ -29,7 +29,7 @@ Nach einem Import erscheint über dem Kalender kurz ein **grünes Banner**, das 
 
 ### 🔄 Wiederkehrende Muster
 - **Wöchentlich**, **alle 2 Wochen** (Kalenderwochen-Parität) oder **monatlich** (fester Tag des Monats oder x. Wochentag im Monat, auch „letzter")
-- **Optionale Gruppen-Relevanz** je Muster; Muster nachträglich bearbeiten/löschen
+- **Optionale Gruppen-Relevanz** je Muster; Muster nachträglich bearbeiten/löschen; Liste der aktiven Muster chronologisch sortiert (Wochentag ab Montag, dann Uhrzeit, dann Ort)
 
 ### 📊 Statistik
 - Einsätze je Person **gesamt und je Wochentag** über den gesamten Plan
