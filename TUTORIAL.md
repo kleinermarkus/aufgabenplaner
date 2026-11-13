@@ -48,6 +48,7 @@ Alles Grundlegende finden Sie im Tab **⚙️ Stammdaten & Export**:
 2. **Zeitslots** anlegen (Wochentag + Uhrzeit, z. B. „Dienstag 09:00") – wann finden Aufgaben statt?
 3. **Bundesland** wählen (für die Feiertage im Kalender, Standard: Sachsen).
 4. **Gruppen-Termine: Verteilung** einstellen (optional): ob Zuteilungen für Gruppentermine automatisch erfolgen sollen und ob diese Termine in die Empfehlung/automatische Verteilungsstatistik einfließen oder außer Konkurrenz laufen (Standard für beides: nein). Die Einstellungen werden zwischen gekoppelten Geräten synchronisiert.
+5. **Orte & Zeitslots verknüpfen** (optional): In der Matrix festlegen, welche Orte für welchen Zeitslot genutzt werden können. Nur freigegebene Kombinationen erscheinen in der Qualifikations-Matrix sowie beim Bearbeiten von Terminen und Mustern – ohne Festlegung sind alle Kombinationen zulässig. Auch diese Einstellung wird mit synchronisiert.
 
 Orte und Zeitslots brauchen Sie, bevor Sie Muster und Termine anlegen können – die Qualifikations-Matrix bezieht sich immer auf eine Kombination aus Zeitslot und Ort.
 
@@ -58,7 +59,7 @@ Orte und Zeitslots brauchen Sie, bevor Sie Muster und Termine anlegen können �
 Im Tab **👥 Personen**:
 
 1. **Person hinzufügen**: Name eingeben – jede Person erhält automatisch eine **eindeutige Farbe**, die im ganzen Kalender verwendet wird.
-2. **Qualifikations-Matrix ausfüllen**: Klicken Sie pro Person die Zellen an (Zeitslot × Ort), die die Person übernehmen kann. Nur qualifizierte Personen werden vorgeschlagen und automatisch eingeteilt.
+2. **Qualifikations-Matrix ausfüllen**: Klicken Sie pro Person die Zellen an (Zeitslot × Ort), die die Person übernehmen kann. Nur qualifizierte Personen werden vorgeschlagen und automatisch eingeteilt. Die Matrix zeigt dabei nur Kombinationen, die in den Stammdaten unter „Orte & Zeitslots verknüpfen“ freigegeben sind.
 3. **Abwesenheiten** (Urlaub, Krankheit …) können Sie hier pro Person manuell eintragen – oder praktischer per Import (siehe Schritt 1 im Monatsrhythmus).
 
 ---

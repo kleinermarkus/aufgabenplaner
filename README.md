@@ -23,7 +23,7 @@ Nach einem Import erscheint über dem Kalender kurz ein **grünes Banner**, das 
 
 ### 👥 Personen & Matrix
 - **Personen anlegen/verwalten** (Name; jede erhält automatisch eine **eindeutige Farbe**, keine zwei Personen teilen sich einen Farbton)
-- **Qualifikations-Matrix**: Pro Person × Zeitslot × Ort, wer kann was übernehmen
+- **Qualifikations-Matrix**: Pro Person × Zeitslot × Ort, wer kann was übernehmen (beschränkt auf die unter „Orte & Zeitslots verknüpfen“ freigegebenen Kombinationen)
 - **Abwesenheiten**: Pro Person manuell (Start/Ende, Grund) oder per Import (Schaltfläche „1. Abwesenheiten importieren" auf der Kalenderseite)
 - **Externes Schichtsystem (Rotation)**: Startdatum + beliebiger Rhythmus aus Früh/Spät/Nacht/frei (F/S/N/–), Vorschau der nächsten 7 Tage; Schichten blockieren automatisch (Früh 06–14, Spät 14–22, Nacht 22–06 + Folgetag bis 14 Uhr)
 
@@ -36,6 +36,7 @@ Nach einem Import erscheint über dem Kalender kurz ein **grünes Banner**, das 
 
 ### ⚙️ Stammdaten & Export
 - **Orte** und **Zeitslots** verwalten (Wochentag + Uhrzeit)
+- **Orte & Zeitslots verknüpfen**: Matrix in den Stammdaten, die festlegt, welche Orte für welchen Zeitslot zulässig sind; die Personen-Matrix und die Ort-Auswahl beim Bearbeiten von Terminen und Mustern zeigen nur freigegebene Kombinationen (ohne Festlegung: alle Kombinationen zulässig). Wird über die Geräte-Synchronisierung übertragen.
 - **Gruppen verwalten**: Anlegen, Mitglieder zuordnen; Löschen entfernt die Gruppe aus allen Terminen/Mustern
 - **Bundesland** für die gesetzlichen Feiertage (16 Länder, Standard Sachsen)
 - **Ereignisse verwalten**: importierte Ereignisse mit Titel, Uhrzeit, Zeitraum und Ort einsehen und einzeln löschen – der Import erfolgt über die Schaltfläche „2. Ereignisse importieren" auf der Kalenderseite
