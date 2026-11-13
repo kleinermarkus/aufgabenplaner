@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.29';
+    const APP_VERSION = '1.10.30';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -52,6 +52,17 @@
         if (diff !== 0) return diff > 0;
       }
       return false;
+    };
+
+    // „Was ist neu?“ – Änderungen der letzten Versionen; erscheinen nach einem
+    // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
+    const CHANGELOG = {
+      '1.10.30': ['Nach einer Aktualisierung zeigt die App jetzt einmalig ein Banner mit den Änderungen der neuen Version.'],
+      '1.10.29': ['Neu in den Stammdaten: Karte „Orte & Zeitslots verknüpfen“ – festlegen, welche Orte zu welchem Zeitslot passen.', 'Personen-Matrix und Termin-/Muster-Bearbeitung zeigen nur noch freigegebene Ort-Zeitslot-Kombinationen.'],
+      '1.10.28': ['Backup-Import synchronisiert Löschungen zuverlässig auf das andere Gerät (auch Termine, die im Backup fehlen, werden entfernt).'],
+      '1.10.27': ['Das KI-Modell bleibt nach Browser-Neustarts erhalten – Update-Schaltfläche und Cache-Aktivierung löschen Modell-Caches nicht mehr.'],
+      '1.10.26': ['Behoben: Im Tutorial war der Weiter-Button bei Schritten mit Screenshots abgeschnitten.'],
+      '1.10.25': ['Gruppen-Optionen in den Stammdaten: automatische Zuteilung für Gruppentermine und Einbezug in die Verteilungsbilanz (Standard: außer Konkurrenz).', 'Import-Hinweise für NW Scheduler inkl. Bilder-Anleitung im Tutorial.']
     };
 
     const DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
@@ -672,6 +683,22 @@
       const closeTutorial = () => {
         setTutorialOpen(false);
         localStorage.setItem('app_tutorial_done', '1');
+      };
+
+      // ---------- Was ist neu? (Changelog-Banner nach Versionswechsel) ----------
+      const [changelogSeen, setChangelogSeen] = useState(null); // zuletzt gesehene Version (null = nichts anzuzeigen)
+      useEffect(() => {
+        try {
+          const seen = localStorage.getItem('app_seen_version');
+          // Nur bei echtem Versionswechsel zeigen – bei allererster Installation (kein Eintrag) still merken
+          if (seen && seen !== APP_VERSION && CHANGELOG[APP_VERSION]) setChangelogSeen(seen);
+        } catch (err) {}
+      }, []);
+      const changelogEntries = changelogSeen === null ? [] :
+        Object.keys(CHANGELOG).filter(v => isNewerVersion(v, changelogSeen)).sort((a, b) => isNewerVersion(a, b) ? 1 : -1);
+      const dismissChangelog = () => {
+        setChangelogSeen(null);
+        try { localStorage.setItem('app_seen_version', APP_VERSION); } catch (err) {}
       };
 
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
@@ -2058,6 +2085,18 @@
             } catch (err) {}
             location.reload();
           }, className: 'px-3 py-1 bg-white text-amber-700 rounded font-bold text-xs hover:bg-amber-50' }, 'Jetzt aktualisieren')
+        ) : null,
+
+        !updateAvailable && changelogSeen !== null ? h('div', { className: 'fixed top-0 left-0 right-0 z-50 bg-indigo-600 text-white text-sm shadow-lg no-print' },
+          h('div', { className: 'max-w-3xl mx-auto px-4 py-3 flex items-start justify-between gap-3' },
+            h('div', { className: 'min-w-0 flex-1' },
+              h('div', { className: 'font-bold' }, `\u2728 Was ist neu in Version ${APP_VERSION}?`),
+              h('ul', { className: 'mt-1 space-y-0.5 text-xs list-disc list-inside max-h-32 overflow-auto' },
+                changelogEntries.flatMap((v, vi) => CHANGELOG[v].map((line, li) => h('li', { key: `${vi}-${li}` }, v === APP_VERSION ? line : `v${v}: ${line}`)))
+              )
+            ),
+            h('button', { onClick: dismissChangelog, className: 'px-3 py-1 bg-white text-indigo-700 rounded font-bold text-xs hover:bg-indigo-50 shrink-0' }, 'Alles klar')
+          )
         ) : null,
 
         syncOpen ? h('div', { className: 'fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4 no-print', onClick: closeSyncModal },

@@ -140,6 +140,8 @@ Die Seite ist als **PWA (Progressive Web App)** installierbar – Voraussetzung 
 
 Im Header wird die aktuelle Versionsnummer (z. B. **v1.1.0**) angezeigt. Die App prüft beim Laden, alle 5 Minuten und beim Fensterfokus per `version.json`, ob auf dem Server eine neuere Version liegt. Falls ja, erscheint oben ein gelber Hinweis mit Button **„Jetzt aktualisieren“** (lädt die Seite neu).
 
+**„Was ist neu?“-Banner:** Nach einer Aktualisierung zeigt die App beim nächsten Start einmalig einen blauen Banner mit den Änderungen der neuen Version (bei Sprung über mehrere Versionen werden alle Zwischenversionen aufgelistet). Ein Klick auf **„Alles klar“** blendet ihn aus; die Erinnerung wird lokal unter `app_seen_version` gemerkt. Bei der allerersten Installation erscheint der Banner nicht (dort führt das Tutorial ein).
+
 Beim Aktualisieren einer neuen Version: `APP_VERSION` in `index.html` **und** `version.json` auf denselben neuen Wert setzen.
 
 ## Geräte-Synchronisation (WebRTC Data Channels)

@@ -191,6 +191,8 @@ Die App ist als **PWA installierbar** und funktioniert danach auch **offline**:
 
 **Updates:** Erscheint eine neue Version auf dem Server, meldet das gelbe **Update-Banner** oben „Eine neue Version ist verfügbar – bitte aktualisieren." Ein Klick auf **„Jetzt aktualisieren"** leert den Cache und lädt die neue Version. Die aktuelle Versionsnummer steht klein neben dem Sync-Button in der Kopfzeile.
 
+**Was ist neu?** Nach einer Aktualisierung zeigt die App beim nächsten Start einmalig einen blauen Änderungs-Banner („✨ Was ist neu in Version …?“) mit den Neuerungen – bei Sprüngen über mehrere Versionen werden alle Zwischenversionen aufgelistet. Mit **„Alles klar“** ausblenden; bei der allerersten Installation erscheint er nicht.
+
 > Der Erste-Start braucht einmalig Internet (Laden der Bibliotheken); danach läuft alles offline. Hinweis für das zweite Gerät: Nach einem App-Update beide Geräte aktualisieren und – falls der Sync zickt – die Kopplung einmal neu anlegen.
 
 ---
