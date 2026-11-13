@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.11.12';
+    const APP_VERSION = '1.11.13';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -702,6 +702,7 @@
       const aiLoadedModelRef = useRef(null);
       const aiChatRef = useRef(null);
       const aiBusyRef = useRef(false);
+      const aiGenIdRef = useRef(0);
 
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
       const SYNC_PREFIX = 'aufgabenplaner-';
@@ -1362,11 +1363,13 @@
         const q = (question || aiInput).trim();
         if (!q || aiBusyRef.current || aiPhase !== 'ready') return;
         aiBusyRef.current = true;
+        const genId = ++aiGenIdRef.current;
         setAiInput('');
         setAiBusy(true);
         const history = [...aiMessages, { role: 'user', content: q }];
         setAiMessages([...history, { role: 'assistant', content: '' }]);
         let watchdog = null;
+        let watchdogFired = false;
         try {
           const prior = history
             .slice(0, -1)
@@ -1381,12 +1384,18 @@
           let reply = '';
           let lastActivity = Date.now();
           watchdog = setInterval(() => {
-            if (Date.now() - lastActivity > 60000) {
+            if (Date.now() - lastActivity > 60000 && !watchdogFired) {
+              watchdogFired = true;
               try { aiEngineRef.current.interruptGenerate(); } catch (err) {}
+              // Hart durchgreifen: UI freigeben, auch wenn der GPU-Treiber die Generierung nicht sauber abbricht
+              setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: Die Antwort hat zu lange gedauert – der Grafiktreiber reagiert nicht. Bitte die Frage erneut stellen. Hilft das nicht, den Browser einmal komplett neu starten (nach einem Treiber-Hänger sperrt WebGPU oft bis zum Neustart).' }; return cp; });
+              aiBusyRef.current = false;
+              setAiBusy(false);
             }
           }, 5000);
           const chunks = await aiEngineRef.current.chat.completions.create({ messages, stream: true, stream_options: { include_usage: true }, temperature: 0.3, max_tokens: 500 });
           for await (const chunk of chunks) {
+            if (genId !== aiGenIdRef.current) break; // veraltete Generierung: nicht mehr ins Chatfenster schreiben
             const delta = chunk.choices?.[0]?.delta?.content || '';
             if (delta) {
               lastActivity = Date.now();
@@ -1395,16 +1404,20 @@
               if (aiChatRef.current) aiChatRef.current.scrollTop = aiChatRef.current.scrollHeight;
             }
           }
-          if (!reply.trim()) {
+          if (genId === aiGenIdRef.current && !watchdogFired && !reply.trim()) {
             setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: Keine Antwort erhalten. Bitte die Frage erneut stellen.' }; return cp; });
           }
         } catch (err) {
           console.error(err);
-          setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + friendlyAiError(err?.message || err) }; return cp; });
+          if (genId === aiGenIdRef.current && !watchdogFired) {
+            setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + friendlyAiError(err?.message || err) }; return cp; });
+          }
         } finally {
           if (watchdog) clearInterval(watchdog);
-          aiBusyRef.current = false;
-          setAiBusy(false);
+          if (genId === aiGenIdRef.current && !watchdogFired) {
+            aiBusyRef.current = false;
+            setAiBusy(false);
+          }
         }
       };
 
