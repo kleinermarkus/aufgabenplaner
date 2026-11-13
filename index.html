@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.31';
+    const APP_VERSION = '1.10.32';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -57,6 +57,7 @@
     // „Was ist neu?“ – Änderungen der letzten Versionen; erscheinen nach einem
     // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
     const CHANGELOG = {
+      '1.10.32': ['Behoben: Der „Was ist neu?“-Banner erscheint jetzt zuverlässig – auch auf Geräten, die die App schon vor Einführung des Banners genutzt haben.'],
       '1.10.31': ['Beim Öffnen der App ist jetzt automatisch der heutige Tag angewählt.'],
       '1.10.30': ['Nach einer Aktualisierung zeigt die App jetzt einmalig ein Banner mit den Änderungen der neuen Version.'],
       '1.10.29': ['Neu in den Stammdaten: Karte „Orte & Zeitslots verknüpfen“ – festlegen, welche Orte zu welchem Zeitslot passen.', 'Personen-Matrix und Termin-/Muster-Bearbeitung zeigen nur noch freigegebene Ort-Zeitslot-Kombinationen.'],
@@ -691,8 +692,19 @@
       useEffect(() => {
         try {
           const seen = localStorage.getItem('app_seen_version');
-          // Nur bei echtem Versionswechsel zeigen – bei allererster Installation (kein Eintrag) still merken
-          if (seen && seen !== APP_VERSION && CHANGELOG[APP_VERSION]) setChangelogSeen(seen);
+          if (seen) {
+            // Echter Versionswechsel: Banner zeigen und die neue Version sofort merken
+            // (einmalige Anzeige pro Version – auch ohne Klick auf „Alles klar“)
+            if (seen !== APP_VERSION && CHANGELOG[APP_VERSION]) setChangelogSeen(seen);
+            localStorage.setItem('app_seen_version', APP_VERSION);
+          } else {
+            // Kein Versions-Gedächtnis vorhanden:
+            // – Erstinstallation (Tutorial noch nie geschlossen) → still merken, kein Banner
+            // – Bestandsgerät aus der Zeit vor Einführung des Banners → Banner mit allen Einträgen zeigen
+            const usedBefore = !!localStorage.getItem('app_tutorial_done');
+            if (usedBefore && CHANGELOG[APP_VERSION]) setChangelogSeen('');
+            localStorage.setItem('app_seen_version', APP_VERSION);
+          }
         } catch (err) {}
       }, []);
       const changelogEntries = changelogSeen === null ? [] :

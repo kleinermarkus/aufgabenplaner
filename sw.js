@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aufgabenplaner-v11';
+const CACHE_NAME = 'aufgabenplaner-v12';
 
 const PRECACHE = [
   './',
