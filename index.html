@@ -43,7 +43,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.38';
+    const APP_VERSION = '1.10.39';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -60,6 +60,7 @@
     // „Was ist neu?“ – Änderungen der letzten Versionen; erscheinen nach einem
     // Versionswechsel einmalig als Banner (gemerkt unter app_seen_version)
     const CHANGELOG = {
+      '1.10.39': ['Feiertage und Ereignisse stehen jetzt als Chips links neben der Tageszahl im Kalender und nutzen den verfügbaren Platz, statt rechts abgeschnitten zu werden.'],
       '1.10.38': ['Neu: Rückgängig-Funktion \u2013 nach jeder Änderung erscheint für einige Sekunden ein Banner mit ablaufendem Kreis, über das sich die letzte Änderung zurücknehmen lässt (wird auch auf dem anderen Gerät rückgängig gemacht).'],
       '1.10.37': ['Im Bearbeiten-Formular der Muster werden die Zusatzoptionen (Wochen-Rhythmus, monatliche Optionen) jetzt nur noch angezeigt, wenn die passende Frequenz gewählt ist.'],
       '1.10.36': ['Muster-Liste: Gruppen-Chips stehen jetzt direkt hinter der Uhrzeit in derselben Zeile.'],
@@ -2136,13 +2137,14 @@
               isSelected ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-200' : 'border-slate-200 bg-white hover:border-slate-300'
             } ${!isCurrentMonth ? 'opacity-40 bg-slate-100/50' : ''} ${holidayName ? 'bg-amber-50/40' : (dayEvents.length > 0 ? 'bg-violet-50/40' : '')}`
           },
-            h('div', { className: 'flex justify-between items-start' },
-              h('span', { className: `text-xs font-bold px-1.5 py-0.5 rounded ${holidayName ? 'bg-amber-200 text-amber-900' : 'text-slate-700'}` }, dayNum),
-              holidayName ? h('span', { className: 'text-[9px] font-semibold text-amber-700 truncate max-w-[36px] sm:max-w-[70px]' }, holidayName) : null,
-              dayEvents.length > 0 ? h('span', {
-                className: 'text-[9px] font-semibold text-violet-700 truncate max-w-[36px] sm:max-w-[70px]',
-                title: dayEvents.map(ev => `${ev.title}${ev.time ? ' ' + ev.time : ''}${ev.note ? ' (' + ev.note + ')' : ''}`).join(' · ')
-              }, dayEvents.map(ev => ev.title).join(' · ')) : null
+            h('div', { className: 'flex items-start gap-1 flex-wrap min-w-0' },
+              h('span', { className: `text-xs font-bold px-1.5 py-0.5 rounded shrink-0 ${holidayName ? 'bg-amber-200 text-amber-900' : 'text-slate-700'}` }, dayNum),
+              holidayName ? h('span', { className: 'text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 truncate max-w-full min-w-0', title: holidayName }, holidayName) : null,
+              dayEvents.map(ev => h('span', {
+                key: ev.id,
+                className: 'text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-300 truncate max-w-full min-w-0',
+                title: `${ev.title}${ev.time ? ' ' + ev.time : ''}${ev.note ? ' (' + ev.note + ')' : ''}`
+              }, ev.title))
             ),
             h('div', { className: 'hidden sm:block space-y-1 my-1 min-w-0' },
               dayTasks.map(t => {
