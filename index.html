@@ -40,7 +40,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.11.10';
+    const APP_VERSION = '1.11.11';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -121,6 +121,7 @@
     const ASSISTANT_SYSTEM_PROMPT = [
       'Du bist der Erkl\u00e4r-Assistent eines Monatsplaners f\u00fcr Aufgaben.',
       'Antworte immer kurz, klar und auf Deutsch.',
+      'Beantworte immer nur die letzte Frage im Verlauf und wiederhole keine fr\u00fcheren Antworten.',
       'Antworte ausschlie\u00dflich auf Basis der dir gegebenen Daten \u2013 erfinde nichts.',
       'Die automatische Verteilung folgt festen Regeln (in dieser Reihenfolge): 1. L\u00e4ngste Pause (Abstand zur n\u00e4chsten Einteilung davor oder danach), 2. Niedrigste Bilanz (wenigste Einteilungen), 3. Wochentags-Ausgleich, 4. Alphabetisch.',
       'Nur qualifizierte und verf\u00fcgbare Personen k\u00f6nnen eingeteilt werden. Nicht verf\u00fcgbar sind: Abwesende, Personen in Fr\u00fchschicht (06-14 Uhr), Sp\u00e4tschicht (14-22 Uhr), Nachtschicht (22-06 Uhr plus Folgetag bis 14 Uhr) oder mit Gruppentermin am selben Tag.',
@@ -700,6 +701,7 @@
       const aiEngineRef = useRef(null);
       const aiLoadedModelRef = useRef(null);
       const aiChatRef = useRef(null);
+      const aiBusyRef = useRef(false);
 
       // ---------- Geräte-Sync (WebRTC Data Channels via PeerJS) ----------
       const SYNC_PREFIX = 'aufgabenplaner-';
@@ -1358,33 +1360,52 @@
 
       const askAssistant = async (question) => {
         const q = (question || aiInput).trim();
-        if (!q || aiBusy || aiPhase !== 'ready') return;
+        if (!q || aiBusyRef.current || aiPhase !== 'ready') return;
+        aiBusyRef.current = true;
         setAiInput('');
         setAiBusy(true);
         const history = [...aiMessages, { role: 'user', content: q }];
         setAiMessages([...history, { role: 'assistant', content: '' }]);
+        let watchdog = null;
         try {
-          const prior = aiMessages.slice(-6).map(m => ({ role: m.role, content: m.content }));
+          const prior = history
+            .slice(0, -1)
+            .slice(-6)
+            .filter(m => m.content && String(m.content).trim() && !String(m.content).startsWith('Fehler:'))
+            .map(m => ({ role: m.role, content: m.content }));
           const messages = [
             { role: 'system', content: ASSISTANT_SYSTEM_PROMPT },
             ...prior,
             { role: 'user', content: q + '\n\n[Aktueller Datenstand]\n' + buildAssistantContext(selectedDateStr) }
           ];
-          const chunks = await aiEngineRef.current.chat.completions.create({ messages, stream: true, stream_options: { include_usage: true }, temperature: 0.3 });
           let reply = '';
+          let lastActivity = Date.now();
+          watchdog = setInterval(() => {
+            if (Date.now() - lastActivity > 60000) {
+              try { aiEngineRef.current.interruptGenerate(); } catch (err) {}
+            }
+          }, 5000);
+          const chunks = await aiEngineRef.current.chat.completions.create({ messages, stream: true, stream_options: { include_usage: true }, temperature: 0.3, max_tokens: 500 });
           for await (const chunk of chunks) {
             const delta = chunk.choices?.[0]?.delta?.content || '';
             if (delta) {
+              lastActivity = Date.now();
               reply += delta;
               setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: reply }; return cp; });
               if (aiChatRef.current) aiChatRef.current.scrollTop = aiChatRef.current.scrollHeight;
             }
           }
+          if (!reply.trim()) {
+            setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: Keine Antwort erhalten. Bitte die Frage erneut stellen.' }; return cp; });
+          }
         } catch (err) {
           console.error(err);
           setAiMessages(prev => { const cp = prev.slice(); cp[cp.length - 1] = { role: 'assistant', content: 'Fehler: ' + friendlyAiError(err?.message || err) }; return cp; });
+        } finally {
+          if (watchdog) clearInterval(watchdog);
+          aiBusyRef.current = false;
+          setAiBusy(false);
         }
-        setAiBusy(false);
       };
 
       const assistantSuggestions = useMemo(() => {
