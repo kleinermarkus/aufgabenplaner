@@ -43,7 +43,7 @@
   <script>
     const { useState, useEffect, useMemo, useRef, createElement: h } = React;
 
-    const APP_VERSION = '1.10.43';
+    const APP_VERSION = '1.10.44';
 
     // Vergleicht zwei Versionsnummern („1.10.3“ > „1.9.9“) – true nur, wenn a neuer als b ist
     const isNewerVersion = (a, b) => {
@@ -62,6 +62,7 @@
     const CHANGELOG = {
       '1.10.42': ['Ereignisse lassen sich in den Stammdaten jetzt ebenfalls bearbeiten (Stift-Symbol): Titel, Datum, Zeitraum, Uhrzeit und Notiz ändern – mit den gleichen Symbole wie überall (✏️, ✓, ✕).'],
       '1.10.43': ['Alle einzelnen Löschen/Entfernen-Schaltflächen sind jetzt einheitliche Mülleimer-Schaltflächen (🗑️) mit Tooltip – bei Terminen, Personen, Abwesenheiten, Mustern, Orten, Zeitslots, Gruppen und Ereignissen. Die großen Aktionen (Zuteilungen/Termine löschen, Gefahrenzone) bleiben Text-Schaltflächen.'],
+      '1.10.44': ['Behoben: Beim Klick auf den Stift bei Terminen und Mustern wurde das Formular sofort mit unveränderten Werten gespeichert („Aufgabe aktualisiert!“/„Muster erfolgreich aktualisiert!“) – jetzt öffnet sich die Bearbeitung korrekt. Die kleinen Symbol-Schaltflächen (✏️ bearbeiten, ✓ speichern, ✕ abbrechen, 🗑️ löschen) sind jetzt überall gleich groß, deutlich als Button erkennbar, verändern sich beim Darüberfahren mit der Maus und sind auf Mobilgeräten touch-freundlich vergrößert; bei Orten und Zeitslots erscheinen ✓/✕ im Bearbeiten-Modus wieder rechtsbuendig.'],
       '1.10.41': ['Einheitliche Bedienung: Beim Bearbeiten von Terminen und Mustern gibt es jetzt wie in den Stammdaten Stift (✏️), Häkchen (✓ speichern) und ✕ (Abbrechen) statt eines zusätzlichen Speichern-Buttons.'],
       '1.10.40': ['Orte und Zeitslots lassen sich in den Stammdaten jetzt direkt bearbeiten (Stift-Symbol): Orte umbenennen, Wochentag und Uhrzeit eines Zeitslots ändern – ohne Verlust der bestehenden Verknüpfungen zu Mustern, Terminen und Qualifikationen.'],
       '1.10.39': ['Feiertage und Ereignisse stehen jetzt als Chips links neben der Tageszahl im Kalender und nutzen den verfügbaren Platz, statt rechts abgeschnitten zu werden.'],
@@ -148,6 +149,9 @@
       if (groupCount === 1) return 'bg-blue-100 text-blue-900 border-blue-300';
       return personColor || 'bg-red-50 border-red-300 text-red-700';
     };
+    // Einheitliche Icon-Schaltflaechen: deutlich als Button erkennbar, Hover-Effekt,
+    // touch-freundliche Groesse auf Mobilgeraeten (36px) und kompakt ab sm (32px)
+    const ICON_BTN = 'inline-flex items-center justify-center rounded-lg shrink-0 transition-colors select-none leading-none w-9 h-9 sm:w-8 sm:h-8 text-base sm:text-sm';
     const getInitials = (name) => {
       if (!name) return '?';
       const parts = name.trim().split(/\s+/);
@@ -2471,11 +2475,11 @@
                         h('div', { className: 'font-bold text-xs text-slate-900' }, loc?.name || 'Ort'),
                         h('div', { className: 'flex items-center gap-2' },
                           isEditingThis
-                            ? h('button', { type: 'submit', form: 'task-edit-form', title: 'Speichern', className: 'text-emerald-600 text-base font-bold leading-none px-1' }, '✓')
-                            : h('button', { onClick: () => { setEditingTask(task); setEditFormSlotId(task.slotId); }, title: 'Ändern', className: 'text-indigo-600 text-xs hover:text-indigo-800 px-1' }, '✏️'),
+                            ? h('button', { type: 'submit', form: 'task-edit-form', title: 'Speichern', className: ICON_BTN + ' text-emerald-600 hover:bg-emerald-50' }, '✓')
+                            : h('button', { type: 'button', onClick: () => { setEditingTask(task); setEditFormSlotId(task.slotId); }, title: 'Bearbeiten', className: ICON_BTN + ' text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800' }, '✏️'),
                           isEditingThis
-                            ? h('button', { onClick: () => setEditingTask(null), title: 'Abbrechen', className: 'text-slate-400 text-base font-bold leading-none px-1' }, '✕')
-                            : h('button', { onClick: () => { markDeleted('schedule', task.id); setSchedule(schedule.filter(t => t.id !== task.id)); }, title: 'Entfernen', className: 'text-rose-500 text-xs hover:text-rose-700 px-1' }, '🗑️')
+                            ? h('button', { type: 'button', onClick: () => setEditingTask(null), title: 'Abbrechen', className: ICON_BTN + ' text-slate-400 hover:bg-slate-200 hover:text-slate-600' }, '✕')
+                            : h('button', { type: 'button', onClick: () => { markDeleted('schedule', task.id); setSchedule(schedule.filter(t => t.id !== task.id)); }, title: 'Entfernen', className: ICON_BTN + ' text-rose-500 hover:bg-rose-50 hover:text-rose-700' }, '🗑️')
                         )
                       ),
                       h('div', { className: 'flex items-center gap-1.5' },
@@ -2753,7 +2757,7 @@
                   h('div', { className: 'space-y-3' },
                     h('div', { className: 'font-bold text-sm text-slate-800 flex justify-between items-center' },
                       h('span', null, p.name),
-                      h('button', { onClick: () => { (p.absences || []).forEach(abs => markDeleted('absences', abs.id)); markDeleted('people', p.id); setPeople(people.filter(person => person.id !== p.id)); }, title: 'Löschen', className: 'text-rose-500 text-xs font-normal hover:text-rose-700 px-1' }, '🗑️')
+                      h('button', { onClick: () => { (p.absences || []).forEach(abs => markDeleted('absences', abs.id)); markDeleted('people', p.id); setPeople(people.filter(person => person.id !== p.id)); }, type: 'button', title: 'Löschen', className: ICON_BTN + ' text-rose-500 hover:bg-rose-50 hover:text-rose-700' }, '🗑️')
                     ),
 
                     // Externes Schichtsystem (Rotation)
@@ -2896,14 +2900,16 @@
                           h('span', null, `${a.start} bis ${a.end} ${a.label ? `(${a.label})` : ''}`),
                           h('div', { className: 'flex items-center gap-1.5' },
                             h('button', {
+                              type: 'button',
                               onClick: () => setEditingAbsence({ personId: p.id, absId: a.id, start: a.start, end: a.end }),
-                              className: 'text-indigo-600 hover:text-indigo-800 text-xs',
+                              className: ICON_BTN + ' text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800',
                               title: 'Bearbeiten'
                             }, '✏️'),
                             h('button', {
+                              type: 'button',
                               onClick: () => { markDeleted('absences', a.id); setPeople([...people].sort((x, y) => x.name.localeCompare(y.name, 'de')).map(person => person.id === p.id ? { ...person, absences: person.absences.filter(abs => abs.id !== a.id) } : person)); },
                               title: 'Löschen',
-                              className: 'text-rose-500 font-bold hover:text-rose-700 px-1'
+                              className: ICON_BTN + ' text-rose-500 hover:bg-rose-50 hover:text-rose-700'
                             }, '🗑️')
                           )
                         );
@@ -3064,17 +3070,17 @@
                       ),
                       h('div', { className: 'flex items-center gap-3' },
                         isEditingThis
-                          ? h('button', { type: 'submit', form: 'pattern-edit-form', title: 'Speichern', className: 'text-emerald-600 text-base font-bold leading-none px-1' }, '✓')
-                          : h('button', { onClick: () => {
+                          ? h('button', { type: 'submit', form: 'pattern-edit-form', title: 'Speichern', className: ICON_BTN + ' text-emerald-600 hover:bg-emerald-50' }, '✓')
+                          : h('button', { type: 'button', onClick: () => {
                               setEditingPattern(pat);
                               setEditPatSlotId(pat.slotId);
                               setEditPatGroupIds([...(pat.groupIds || [])]);
                               setEditPatFreq(pat.frequency);
                               setEditPatMonthlyMode(pat.monthlyMode || 'dayOfMonth');
-                            }, title: 'Bearbeiten', className: 'text-indigo-600 text-xs hover:text-indigo-800 px-1' }, '✏️'),
+                            }, title: 'Bearbeiten', className: ICON_BTN + ' text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800' }, '✏️'),
                         isEditingThis
-                          ? h('button', { onClick: () => setEditingPattern(null), title: 'Abbrechen', className: 'text-slate-400 text-base font-bold leading-none px-1' }, '✕')
-                          : h('button', { onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, title: 'Löschen', className: 'text-rose-500 font-bold text-xs hover:underline hover:text-rose-700 px-1' }, '🗑️')
+                          ? h('button', { type: 'button', onClick: () => setEditingPattern(null), title: 'Abbrechen', className: ICON_BTN + ' text-slate-400 hover:bg-slate-200 hover:text-slate-600' }, '✕')
+                          : h('button', { type: 'button', onClick: () => { markDeleted('patterns', pat.id); setPatterns(patterns.filter(p => p.id !== pat.id)); }, title: 'Löschen', className: ICON_BTN + ' text-rose-500 hover:bg-rose-50 hover:text-rose-700' }, '🗑️')
                       )
                     ),
                     isEditingThis ? h('form', {
@@ -3227,12 +3233,12 @@
                   locations.map(l => h('div', { key: l.id, className: 'p-2 border rounded bg-slate-50 flex justify-between items-center gap-2 text-xs' },
                     editingLocId === l.id ? h('form', { onSubmit: (e) => { e.preventDefault(); handleSaveLocation(); }, className: 'flex-1 flex gap-1 items-center min-w-0' },
                       h('input', { type: 'text', autoFocus: true, value: editingLocName, onChange: (e) => setEditingLocName(e.target.value), className: 'text-xs p-1.5 border rounded bg-white border-indigo-400 flex-1 min-w-0' }),
-                      h('button', { type: 'submit', className: 'text-emerald-600 font-bold px-1' }, '✓'),
-                      h('button', { type: 'button', onClick: () => setEditingLocId(null), className: 'text-slate-400 font-bold px-1' }, '✕')
+                      h('button', { type: 'submit', title: 'Speichern', className: ICON_BTN + ' text-emerald-600 hover:bg-emerald-50 ml-auto' }, '✓'),
+                      h('button', { type: 'button', onClick: () => setEditingLocId(null), title: 'Abbrechen', className: ICON_BTN + ' text-slate-400 hover:bg-slate-200 hover:text-slate-600' }, '✕')
                     ) : h('span', { className: 'font-bold min-w-0 truncate' }, l.name),
                     editingLocId === l.id ? null : h('div', { className: 'flex gap-2 shrink-0' },
-                      h('button', { onClick: () => { setEditingLocId(l.id); setEditingLocName(l.name); }, className: 'text-indigo-600 font-semibold hover:underline' }, '✏️'),
-                      h('button', { onClick: () => { markDeleted('locations', l.id); setLocations(locations.filter(loc => loc.id !== l.id)); setSettings(prev => prev.slotLocations ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).map(([sid, arr]) => [sid, (arr || []).filter(id => id !== l.id)])), updatedAt: Date.now() } : prev); }, title: 'Löschen', className: 'text-rose-500 hover:text-rose-700 px-1' }, '🗑️')
+                      h('button', { type: 'button', onClick: () => { setEditingLocId(l.id); setEditingLocName(l.name); }, title: 'Bearbeiten', className: ICON_BTN + ' text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800' }, '✏️'),
+                      h('button', { type: 'button', onClick: () => { markDeleted('locations', l.id); setLocations(locations.filter(loc => loc.id !== l.id)); setSettings(prev => prev.slotLocations ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).map(([sid, arr]) => [sid, (arr || []).filter(id => id !== l.id)])), updatedAt: Date.now() } : prev); }, title: 'Löschen', className: ICON_BTN + ' text-rose-500 hover:bg-rose-50 hover:text-rose-700' }, '🗑️')
                     )
                   ))
                 )
@@ -3269,12 +3275,12 @@
                         DAY_ORDER.map(idx => h('option', { key: idx, value: idx }, DAY_NAMES[idx]))
                       ),
                       h('input', { type: 'time', autoFocus: true, value: editingSlotTime, onChange: (e) => setEditingSlotTime(e.target.value), className: 'text-xs p-1.5 border rounded bg-white border-indigo-400' }),
-                      h('button', { type: 'submit', className: 'text-emerald-600 font-bold px-1' }, '✓'),
-                      h('button', { type: 'button', onClick: () => setEditingSlotId(null), className: 'text-slate-400 font-bold px-1' }, '✕')
+                      h('button', { type: 'submit', title: 'Speichern', className: ICON_BTN + ' text-emerald-600 hover:bg-emerald-50 ml-auto' }, '✓'),
+                      h('button', { type: 'button', onClick: () => setEditingSlotId(null), title: 'Abbrechen', className: ICON_BTN + ' text-slate-400 hover:bg-slate-200 hover:text-slate-600' }, '✕')
                     ) : h('span', { className: 'font-bold' }, `${DAY_NAMES[s.dayOfWeek]} ${s.time} Uhr`),
                     editingSlotId === s.id ? null : h('div', { className: 'flex gap-2 shrink-0' },
-                      h('button', { onClick: () => { setEditingSlotId(s.id); setEditingSlotDay(s.dayOfWeek); setEditingSlotTime(s.time); }, className: 'text-indigo-600 font-semibold hover:underline' }, '✏️'),
-                      h('button', { onClick: () => { markDeleted('timeSlots', s.id); setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)); setSettings(prev => prev.slotLocations && prev.slotLocations[s.id] ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).filter(([sid]) => sid !== s.id)), updatedAt: Date.now() } : prev); }, title: 'Löschen', className: 'text-rose-500 hover:text-rose-700 px-1' }, '🗑️')
+                      h('button', { type: 'button', onClick: () => { setEditingSlotId(s.id); setEditingSlotDay(s.dayOfWeek); setEditingSlotTime(s.time); }, title: 'Bearbeiten', className: ICON_BTN + ' text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800' }, '✏️'),
+                      h('button', { type: 'button', onClick: () => { markDeleted('timeSlots', s.id); setTimeSlots(timeSlots.filter(slot => slot.id !== s.id)); setSettings(prev => prev.slotLocations && prev.slotLocations[s.id] ? { ...prev, slotLocations: Object.fromEntries(Object.entries(prev.slotLocations).filter(([sid]) => sid !== s.id)), updatedAt: Date.now() } : prev); }, title: 'Löschen', className: ICON_BTN + ' text-rose-500 hover:bg-rose-50 hover:text-rose-700' }, '🗑️')
                     )
                   ))
                 )
@@ -3341,7 +3347,7 @@
                 groups.map(g => h('div', { key: g.id, className: 'p-3 border rounded-lg bg-slate-50 space-y-2' },
                   h('div', { className: 'flex justify-between items-center' },
                     h('span', { className: 'font-bold text-xs text-slate-800' }, `${g.name} (${(g.personIds || []).length} Personen)`),
-                    h('button', { onClick: () => handleDeleteGroup(g.id), title: 'Löschen', className: 'text-rose-500 font-bold text-xs hover:underline hover:text-rose-700 px-1' }, '🗑️')
+                    h('button', { type: 'button', onClick: () => handleDeleteGroup(g.id), title: 'Löschen', className: ICON_BTN + ' text-rose-500 hover:bg-rose-50 hover:text-rose-700' }, '🗑️')
                   ),
                   h('div', { className: 'flex flex-wrap gap-1' },
                     [...people].sort((a, b) => a.name.localeCompare(b.name, 'de')).map(p => {
@@ -3382,8 +3388,8 @@
                       h('div', { className: 'flex items-center justify-between gap-2' },
                         h('span', { className: 'font-bold text-slate-800' }, 'Ereignis bearbeiten'),
                         h('div', { className: 'flex items-center gap-1' },
-                          h('button', { type: 'submit', title: 'Speichern', className: 'text-emerald-600 text-base font-bold leading-none px-1' }, '✓'),
-                          h('button', { type: 'button', onClick: () => setEditingEventId(null), title: 'Abbrechen', className: 'text-slate-400 text-base font-bold leading-none px-1' }, '✕')
+                          h('button', { type: 'submit', title: 'Speichern', className: ICON_BTN + ' text-emerald-600 hover:bg-emerald-50' }, '✓'),
+                          h('button', { type: 'button', onClick: () => setEditingEventId(null), title: 'Abbrechen', className: ICON_BTN + ' text-slate-400 hover:bg-slate-200 hover:text-slate-600' }, '✕')
                         )
                       ),
                       h('div', { className: 'grid grid-cols-2 sm:grid-cols-3 gap-1.5' },
@@ -3400,8 +3406,8 @@
                         h('div', { className: 'text-slate-500 truncate' }, `${ev.dateStr}${ev.endDateStr ? ' – ' + ev.endDateStr : ''}${ev.note ? ' · ' + ev.note : ''}`)
                       ),
                       h('div', { className: 'flex items-center gap-2 shrink-0' },
-                        h('button', { onClick: () => { setEditingEventId(ev.id); setEditEventForm({ title: ev.title || '', dateStr: ev.dateStr || '', endDateStr: ev.endDateStr || '', time: ev.time || '', timeEnd: ev.timeEnd || '', note: ev.note || '' }); }, title: 'Bearbeiten', className: 'text-indigo-600 text-xs hover:text-indigo-800 px-1' }, '✏️'),
-                        h('button', { onClick: () => { markDeleted('events', ev.id); setEvents(events.filter(x => x.id !== ev.id)); }, title: 'Löschen', className: 'text-rose-500 font-bold text-xs hover:underline hover:text-rose-700 px-1' }, '🗑️')
+                        h('button', { type: 'button', onClick: () => { setEditingEventId(ev.id); setEditEventForm({ title: ev.title || '', dateStr: ev.dateStr || '', endDateStr: ev.endDateStr || '', time: ev.time || '', timeEnd: ev.timeEnd || '', note: ev.note || '' }); }, title: 'Bearbeiten', className: ICON_BTN + ' text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800' }, '✏️'),
+                        h('button', { type: 'button', onClick: () => { markDeleted('events', ev.id); setEvents(events.filter(x => x.id !== ev.id)); }, title: 'Löschen', className: ICON_BTN + ' text-rose-500 hover:bg-rose-50 hover:text-rose-700' }, '🗑️')
                       )
                     )
                   );
